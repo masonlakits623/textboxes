@@ -1,0 +1,1 @@
+Add your own textboxes to the HUD. Style colors, opacity, fonts and borders, show images, and drop any item or picture right into the text. Drag, resize and edit everything in-game with J; hide it all with K. Client-side Fabric mod.

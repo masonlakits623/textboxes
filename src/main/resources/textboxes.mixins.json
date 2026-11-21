@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.textboxes.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "GuiRendererMixin",
+    "ItemGuiElementRenderStateMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

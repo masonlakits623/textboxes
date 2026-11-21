@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "textboxes-showcase",
+  "version": "1.0.0",
+  "name": "Textboxes Showcase",
+  "description": "Takes the store-page screenshots for Textboxes. Dev only.",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "com.textboxes.showcase.ShowcaseScreenshots"
+    ]
+  },
+  "depends": {
+    "textboxes": "*"
+  }
+}

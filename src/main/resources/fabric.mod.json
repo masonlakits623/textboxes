@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "textboxes",
+  "version": "${version}",
+  "name": "Textboxes",
+  "description": "Put your own textboxes on the HUD with custom colors, opacity, fonts, borders and images, plus any item or picture inline in the text. Press J to open the editor, K to toggle visibility.",
+  "authors": [],
+  "license": "MIT",
+  "icon": "assets/textboxes/icon.png",
+  "environment": "client",
+  "accessWidener": "textboxes.accesswidener",
+  "mixins": [
+    "textboxes.mixins.json"
+  ],
+  "entrypoints": {
+    "client": [
+      "com.textboxes.TextboxesClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
