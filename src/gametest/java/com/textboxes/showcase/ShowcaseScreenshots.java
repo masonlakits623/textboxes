@@ -8,6 +8,7 @@ import com.textboxes.gui.EditorScreen;
 import com.textboxes.gui.ImagePickerScreen;
 import com.textboxes.gui.ItemPickerScreen;
 import com.textboxes.gui.TextEditScreen;
+import com.textboxes.gui.TokenPickerScreen;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
@@ -181,6 +182,35 @@ public class ShowcaseScreenshots implements FabricClientGameTest {
             ctx.waitTicks(3);
             clean(ctx);
             shot(ctx, out, "09-hud-minimal");
+
+            // 10. Every shape, with mixed fonts and colors inside the text.
+            ctx.runOnClient(c -> TextboxesClient.CONFIG.boxes = shapeBoxes());
+            ctx.waitTicks(3);
+            clean(ctx);
+            shot(ctx, out, "10-shapes");
+
+            // 11. Editor, BOX tab with the shape controls.
+            ctx.setScreen(EditorScreen::new);
+            ctx.waitTicks(3);
+            ctx.runOnClient(c -> ((EditorScreen) c.currentScreen).select(8, 0));
+            ctx.getInput().setCursorPos(-10, -10);
+            ctx.waitTicks(3);
+            shot(ctx, out, "11-editor-shapes");
+
+            // 12. Text editor with font / color / live-info tokens.
+            EditorScreen editor2 = ctx.computeOnClient(c -> (EditorScreen) c.currentScreen);
+            ctx.setScreen(() -> new TextEditScreen(editor2, TextboxesClient.CONFIG.boxes.get(1)));
+            ctx.waitTicks(3);
+            shot(ctx, out, "12-text-editor-fonts");
+
+            // 13. Font picker and 14. live info picker.
+            ctx.setScreen(() -> TokenPickerScreen.fonts(editor2, s -> {}));
+            ctx.waitTicks(3);
+            shot(ctx, out, "13-font-picker");
+            ctx.setScreen(() -> TokenPickerScreen.info(editor2, s -> {}));
+            ctx.waitTicks(3);
+            shot(ctx, out, "14-info-picker");
+            ctx.setScreen(() -> null);
         }
     }
 
@@ -223,7 +253,7 @@ public class ShowcaseScreenshots implements FabricClientGameTest {
         List<TextBox> list = new ArrayList<>();
 
         // 0: title banner
-        TextBox title = box(222, 8, 196, 34);
+        TextBox title = box(200, 8, 240, 34);
         title.text = "{img:star.png} Textboxes {img:star.png}";
         title.textColor = 0xFFD866;
         title.bold = true;
@@ -308,6 +338,109 @@ public class ShowcaseScreenshots implements FabricClientGameTest {
         tip.borderColor = 0xFFD866;
         tip.borderWidth = 1;
         list.add(tip);
+
+        // 7: live info pill above the hotbar
+        TextBox info = box(205, 268, 230, 20);
+        info.shape = TextBox.Shape.PILL;
+        info.text = "{item:compass} {coords}   {#FFD866}{time}{color}   {#55FF55}{fps} fps";
+        info.iconSize = 10;
+        info.align = TextBox.Align.CENTER;
+        info.valign = TextBox.VAlign.MIDDLE;
+        info.bgColor = 0x101018;
+        info.bgOpacity = 0.7f;
+        info.borderColor = 0xFFFFFF;
+        info.borderOpacity = 0.35f;
+        info.borderWidth = 1;
+        list.add(info);
+
+        // 1.1 look for some of the old boxes
+        title.shape = TextBox.Shape.RIBBON;
+        title.shapeSize = 12;
+        title.gradient = true;
+        title.bgColor2 = 0x4A2A8A;
+        title.bgOpacity2 = 0.9f;
+        title.boxShadow = true;
+        galactic.shape = TextBox.Shape.HEXAGON;
+        galactic.shapeSize = 10;
+        galactic.text = "{font:default}§7Note:§r meet at the portal";
+        pvp.shape = TextBox.Shape.ROUNDED;
+        pvp.shapeSize = 6;
+        pvp.boxShadow = true;
+        tip.shape = TextBox.Shape.SPEECH;
+        tip.shapeSize = 8;
+        tip.tailPos = 0.15f;
+        tip.height = 44;
+
+        return list;
+    }
+
+    private static TextBox shape(TextBox.Shape s, int col, int row, String text) {
+        TextBox b = new TextBox();
+        b.shape = s;
+        b.x = 16 + col * 208;
+        b.y = 20 + row * 100;
+        b.width = 192;
+        b.height = 84;
+        b.text = text;
+        b.align = TextBox.Align.CENTER;
+        b.valign = TextBox.VAlign.MIDDLE;
+        b.borderWidth = 1;
+        b.boxShadow = true;
+        b.shadowOffset = 3;
+        b.iconSize = 12;
+        b.lineSpacing = 2;
+        return b;
+    }
+
+    private static List<TextBox> shapeBoxes() {
+        List<TextBox> list = new ArrayList<>();
+        TextBox b;
+
+        b = shape(TextBox.Shape.RECTANGLE, 0, 0, "§lRectangle\n{font:galactic}secret notes{font}\nmixed with normal text");
+        b.bgColor = 0x101830; b.bgOpacity = 0.8f; b.borderColor = 0x66E0FF;
+        list.add(b);
+
+        b = shape(TextBox.Shape.ROUNDED, 1, 0, "§lRounded\n{#FF88BB}pink{color}, {#55FFFF}cyan{color} and\n{font:uniform}uniform{font} text");
+        b.shapeSize = 12; b.gradient = true;
+        b.bgColor = 0x3A1046; b.bgOpacity = 0.85f; b.bgColor2 = 0x101040; b.bgOpacity2 = 0.85f;
+        b.borderColor = 0xFF88BB;
+        list.add(b);
+
+        b = shape(TextBox.Shape.PILL, 2, 0, "§lPill\n{item:clock} {time}  {item:compass} {facing}");
+        b.bgColor = 0x0E2A1C; b.bgOpacity = 0.85f; b.borderColor = 0x55FF99;
+        list.add(b);
+
+        b = shape(TextBox.Shape.ELLIPSE, 0, 1, "§lEllipse\n{font:illageralt}illager{font} speak");
+        b.bgColor = 0x2A1A08; b.bgOpacity = 0.85f; b.borderColor = 0xFFAA33; b.borderWidth = 2;
+        list.add(b);
+
+        b = shape(TextBox.Shape.HEXAGON, 1, 1, "§lHexagon\n{item:diamond} {#55FFFF}x64{color}  {item:emerald} {#55FF55}x12");
+        b.shapeSize = 24;
+        b.bgColor = 0x08202A; b.bgOpacity = 0.85f; b.borderColor = 0x55FFFF;
+        list.add(b);
+
+        b = shape(TextBox.Shape.CHAMFER, 2, 1, "§lCut corners\n{#FF5555}§lBoss: {color}Ender Dragon\n{item:dragon_head}");
+        b.shapeSize = 14; b.gradient = true;
+        b.bgColor = 0x300808; b.bgOpacity = 0.9f; b.bgColor2 = 0x100404; b.bgOpacity2 = 0.9f;
+        b.borderColor = 0xFF5555;
+        list.add(b);
+
+        b = shape(TextBox.Shape.RIBBON, 0, 2, "§l{#FFD866}Ribbon{color}\n{img:star.png} Level {level} {img:star.png}");
+        b.shapeSize = 18; b.gradient = true;
+        b.bgColor = 0x7A1020; b.bgOpacity = 0.95f; b.bgColor2 = 0x3A0610; b.bgOpacity2 = 0.95f;
+        b.borderColor = 0xFFD866; b.iconSize = 9;
+        list.add(b);
+
+        b = shape(TextBox.Shape.ARROW, 1, 2, "§lArrow\nBase this way {item:red_bed}\n{coords}");
+        b.shapeSize = 30;
+        b.bgColor = 0x1A2A10; b.bgOpacity = 0.85f; b.borderColor = 0xAAFF55;
+        list.add(b);
+
+        b = shape(TextBox.Shape.SPEECH, 2, 2, "§lSpeech bubble\n\"Welcome, {player}!\"");
+        b.shapeSize = 14; b.tailPos = 0.2f;
+        b.bgColor = 0xF4F4F4; b.bgOpacity = 0.95f; b.textColor = 0x202020; b.shadow = false;
+        b.borderColor = 0x202020; b.borderWidth = 2;
+        list.add(b);
 
         return list;
     }

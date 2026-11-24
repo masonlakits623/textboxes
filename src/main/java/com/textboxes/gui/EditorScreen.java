@@ -26,7 +26,7 @@ import java.util.function.IntConsumer;
 /** Main editor: toolbar on top, property panel on the side, boxes are dragged/resized directly. */
 public class EditorScreen extends Screen {
     private enum Tab {
-        BOX("Box", 6), TEXT("Text", 10), COLOR("Color", 8), IMAGE("Image", 6);
+        BOX("Box", 10), TEXT("Text", 10), COLOR("Color", 9), IMAGE("Image", 6);
         final String title;
         final int rows;
         Tab(String title, int rows) { this.title = title; this.rows = rows; }
@@ -35,7 +35,8 @@ public class EditorScreen extends Screen {
     private enum PanelMode { RIGHT, LEFT, HIDDEN }
 
     private enum ColorTarget {
-        BACKGROUND("Background"), TEXT("Text"), BORDER("Border"), IMAGE("Image tint");
+        BACKGROUND("Background"), GRADIENT("Gradient end"), TEXT("Text"), BORDER("Border"),
+        IMAGE("Image tint"), SHADOW("Box shadow");
         final String title;
         ColorTarget(String title) { this.title = title; }
     }
@@ -58,8 +59,20 @@ public class EditorScreen extends Screen {
     private static PanelMode panelMode = PanelMode.RIGHT;
     private static ColorTarget colorTarget = ColorTarget.BACKGROUND;
     private static int scroll = 0;
+    private static boolean snap = true;
+
+    private static final int SNAP_DIST = 4;
+    private static final int MAX_HISTORY = 100;
+    /** Ticks a change must stay unchanged before it becomes one undo step (so typing/dragging is one step). */
+    private static final int SETTLE_TICKS = 8;
 
     private final TextboxConfig config = TextboxesClient.CONFIG;
+    private final List<String> history = new ArrayList<>();
+    private int historyIndex;
+    private String pendingSnapshot;
+    private int pendingTicks;
+    private ButtonWidget undoButton, redoButton;
+    private int guideX = -1, guideY = -1;
     private int selected = -1;
     private Drag drag = Drag.NONE;
     private int dragOffX, dragOffY;
@@ -75,6 +88,67 @@ public class EditorScreen extends Screen {
 
     public EditorScreen() {
         super(Text.literal("Textboxes Editor"));
+        history.add(config.snapshot());
+        historyIndex = 0;
+    }
+
+    // ------------------------------------------------------------------ undo / redo
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (drag != Drag.NONE) return;
+        String now = config.snapshot();
+        if (now.equals(history.get(historyIndex))) {
+            pendingSnapshot = null;
+        } else if (!now.equals(pendingSnapshot)) {
+            pendingSnapshot = now;
+            pendingTicks = 0;
+        } else if (++pendingTicks >= SETTLE_TICKS) {
+            commitHistory(now);
+        }
+        updateUndoButtons();
+    }
+
+    private void commitHistory(String snap) {
+        while (history.size() > historyIndex + 1) history.remove(history.size() - 1);
+        history.add(snap);
+        if (history.size() > MAX_HISTORY) history.remove(0);
+        historyIndex = history.size() - 1;
+        pendingSnapshot = null;
+        updateUndoButtons();
+    }
+
+    /** Records a finished change right away (used after drags and toolbar actions). */
+    private void recordNow() {
+        String now = config.snapshot();
+        if (!now.equals(history.get(historyIndex))) commitHistory(now);
+    }
+
+    private void undo() {
+        recordNow();
+        if (historyIndex <= 0) return;
+        historyIndex--;
+        applyHistory();
+    }
+
+    private void redo() {
+        if (historyIndex >= history.size() - 1) return;
+        historyIndex++;
+        applyHistory();
+    }
+
+    private void applyHistory() {
+        config.restore(history.get(historyIndex));
+        pendingSnapshot = null;
+        if (selected >= config.boxes.size()) selected = config.boxes.size() - 1;
+        config.save();
+        clearAndInit();
+    }
+
+    private void updateUndoButtons() {
+        if (undoButton != null) undoButton.active = historyIndex > 0 || pendingSnapshot != null;
+        if (redoButton != null) redoButton.active = historyIndex < history.size() - 1;
     }
 
     /** Called by sub-screens so widgets get rebuilt when we come back. */
@@ -135,6 +209,13 @@ public class EditorScreen extends Screen {
         tool("Delete", 40, b != null, this::deleteSelected);
         tool("Forward", 46, b != null && selected < n - 1, () -> moveLayer(1));
         tool("Back", 34, b != null && selected > 0, () -> moveLayer(-1));
+        undoButton = tool("Undo", 32, true, this::undo);
+        redoButton = tool("Redo", 32, true, this::redo);
+        updateUndoButtons();
+        tool("Snap: " + (snap ? "On" : "Off"), 50, true, () -> {
+            snap = !snap;
+            clearAndInit();
+        });
         String pm = switch (panelMode) { case RIGHT -> "Right"; case LEFT -> "Left"; case HIDDEN -> "Off"; };
         tool("Panel: " + pm, 62, true, () -> {
             panelMode = PanelMode.values()[(panelMode.ordinal() + 1) % PanelMode.values().length];
@@ -148,7 +229,7 @@ public class EditorScreen extends Screen {
         toolbarBottom = ty + WH;
     }
 
-    private void tool(String label, int w, boolean active, Runnable action) {
+    private ButtonWidget tool(String label, int w, boolean active, Runnable action) {
         if (tx + w > width - 4 && tx > 4) {
             tx = 4;
             ty += ROW;
@@ -158,6 +239,7 @@ public class EditorScreen extends Screen {
         btn.active = active;
         addDrawableChild(btn);
         tx += w + 2;
+        return btn;
     }
 
     // ------------------------------------------------------------------ panel helpers
@@ -276,6 +358,22 @@ public class EditorScreen extends Screen {
         }), 4);
         ButtonWidget fit = panel(button(px, iw, "Fit to image aspect", () -> fitToAspect(b)), 5);
         fit.active = !b.image.isEmpty();
+
+        panel(button(px, iw, "Shape: " + b.shape.title, () -> {
+            TextBox.Shape[] all = TextBox.Shape.values();
+            b.shape = all[(b.shape.ordinal() + 1) % all.length];
+            clearAndInit();
+        }), 6);
+        String sizeLabel = b.shape.sizeLabel != null ? b.shape.sizeLabel : "Shape size";
+        ValueSlider size = panel(new ValueSlider(px, 0, iw, WH, sizeLabel, 0, 32, 1, b.shapeSize,
+                ValueSlider::fmtInt, v -> b.shapeSize = (int) Math.round(v)), 7);
+        size.active = b.shape.sizeLabel != null;
+        ValueSlider tail = panel(new ValueSlider(px, 0, iw, WH, "Tail position", 0, 100, 1, b.tailPos * 100.0,
+                ValueSlider::fmtPercent, v -> b.tailPos = (float) (v / 100.0)), 8);
+        tail.active = b.shape == TextBox.Shape.SPEECH;
+        panel(toggle(px, half, "Shadow", () -> b.boxShadow, v -> b.boxShadow = v), 9);
+        panel(new ValueSlider(px + half + 4, 0, half, WH, "Offset", 1, 8, 1, Math.max(1, b.shadowOffset),
+                ValueSlider::fmtInt, v -> b.shadowOffset = (int) Math.round(v)), 9);
     }
 
     private void buildTextTab(TextBox b) {
@@ -353,6 +451,12 @@ public class EditorScreen extends Screen {
             syncSliders(c);
         });
         panel(hexField, 5);
+
+        panel(toggle(px, iw, "Gradient background", () -> b.gradient, v -> {
+            b.gradient = v;
+            if (v && colorTarget == ColorTarget.BACKGROUND) colorTarget = ColorTarget.GRADIENT;
+            clearAndInit();
+        }), 8);
     }
 
     private void buildImageTab(TextBox b) {
@@ -401,9 +505,11 @@ public class EditorScreen extends Screen {
     private int getRgb(TextBox b) {
         return switch (colorTarget) {
             case BACKGROUND -> b.bgColor;
+            case GRADIENT -> b.bgColor2;
             case TEXT -> b.textColor;
             case BORDER -> b.borderColor;
             case IMAGE -> b.imageTint;
+            case SHADOW -> b.shadowColor;
         } & 0xFFFFFF;
     }
 
@@ -411,18 +517,22 @@ public class EditorScreen extends Screen {
         rgb &= 0xFFFFFF;
         switch (colorTarget) {
             case BACKGROUND -> b.bgColor = rgb;
+            case GRADIENT -> b.bgColor2 = rgb;
             case TEXT -> b.textColor = rgb;
             case BORDER -> b.borderColor = rgb;
             case IMAGE -> b.imageTint = rgb;
+            case SHADOW -> b.shadowColor = rgb;
         }
     }
 
     private float getOpacity(TextBox b) {
         return switch (colorTarget) {
             case BACKGROUND -> b.bgOpacity;
+            case GRADIENT -> b.bgOpacity2;
             case TEXT -> b.textOpacity;
             case BORDER -> b.borderOpacity;
             case IMAGE -> b.imageOpacity;
+            case SHADOW -> b.shadowOpacity;
         };
     }
 
@@ -430,9 +540,11 @@ public class EditorScreen extends Screen {
         v = Math.max(0f, Math.min(1f, v));
         switch (colorTarget) {
             case BACKGROUND -> b.bgOpacity = v;
+            case GRADIENT -> b.bgOpacity2 = v;
             case TEXT -> b.textOpacity = v;
             case BORDER -> b.borderOpacity = v;
             case IMAGE -> b.imageOpacity = v;
+            case SHADOW -> b.shadowOpacity = v;
         }
     }
 
@@ -591,22 +703,88 @@ public class EditorScreen extends Screen {
         TextBox b = sel();
         if (drag != Drag.NONE && b != null) {
             int mx = (int) click.x(), my = (int) click.y();
+            guideX = guideY = -1;
             if (drag == Drag.MOVE) {
-                b.x = Math.max(0, Math.min(width - b.width, mx - dragOffX));
-                b.y = Math.max(0, Math.min(height - b.height, my - dragOffY));
+                int nx = mx - dragOffX, ny = my - dragOffY;
+                if (snap) {
+                    nx = snapMove(nx, b.width, true, b);
+                    ny = snapMove(ny, b.height, false, b);
+                }
+                b.x = Math.max(0, Math.min(width - b.width, nx));
+                b.y = Math.max(0, Math.min(height - b.height, ny));
             } else {
-                b.width = Math.max(8, mx - b.x);
-                b.height = Math.max(8, my - b.y);
+                int right = mx, bottom = my;
+                if (snap) {
+                    right = snapEdge(right, true, b);
+                    bottom = snapEdge(bottom, false, b);
+                }
+                b.width = Math.max(8, right - b.x);
+                b.height = Math.max(8, bottom - b.y);
             }
             return true;
         }
         return super.mouseDragged(click, deltaX, deltaY);
     }
 
+    /** Lines a box edge can snap to: screen edges and center, and the edges and centers of other boxes. */
+    private List<Integer> snapLines(boolean xAxis, TextBox self) {
+        List<Integer> lines = new ArrayList<>();
+        int size = xAxis ? width : height;
+        lines.add(0);
+        lines.add(size / 2);
+        lines.add(size);
+        for (TextBox o : config.boxes) {
+            if (o == self) continue;
+            int p = xAxis ? o.x : o.y, s = xAxis ? o.width : o.height;
+            lines.add(p);
+            lines.add(p + s / 2);
+            lines.add(p + s);
+        }
+        return lines;
+    }
+
+    private void setGuide(boolean xAxis, int line) {
+        if (xAxis) guideX = line; else guideY = line;
+    }
+
+    /** Snaps a moving box's start, center or end to the nearest line. */
+    private int snapMove(int pos, int size, boolean xAxis, TextBox self) {
+        int best = SNAP_DIST + 1, result = pos, line = -1;
+        for (int l : snapLines(xAxis, self)) {
+            int[] edges = {pos, pos + size / 2, pos + size};
+            for (int e : edges) {
+                int d = Math.abs(l - e);
+                if (d < best) {
+                    best = d;
+                    result = pos + (l - e);
+                    line = l;
+                }
+            }
+        }
+        if (line >= 0) setGuide(xAxis, line);
+        return result;
+    }
+
+    /** Snaps the right or bottom edge while resizing. */
+    private int snapEdge(int edge, boolean xAxis, TextBox self) {
+        int best = SNAP_DIST + 1, result = edge;
+        for (int l : snapLines(xAxis, self)) {
+            int d = Math.abs(l - edge);
+            if (d < best) {
+                best = d;
+                result = l;
+            }
+        }
+        if (result != edge || best == 0) setGuide(xAxis, result);
+        return result;
+    }
+
     @Override
     public boolean mouseReleased(Click click) {
         if (drag != Drag.NONE) {
             drag = Drag.NONE;
+            guideX = guideY = -1;
+            recordNow();
             config.save();
             clearAndInit();
             return true;
@@ -630,6 +808,18 @@ public class EditorScreen extends Screen {
     @Override
     public boolean keyPressed(KeyInput input) {
         boolean typing = getFocused() instanceof TextFieldWidget tf && tf.isFocused();
+        boolean ctrlDown = (input.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0;
+        if (!typing && ctrlDown) {
+            boolean shiftDown = (input.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0;
+            if (input.key() == GLFW.GLFW_KEY_Z) {
+                if (shiftDown) redo(); else undo();
+                return true;
+            }
+            if (input.key() == GLFW.GLFW_KEY_Y) {
+                redo();
+                return true;
+            }
+        }
         TextBox b = sel();
         if (!typing && b != null) {
             int key = input.key();
@@ -686,6 +876,16 @@ public class EditorScreen extends Screen {
                 ctx.drawStrokedRectangle(b.x - 1, b.y - 1, b.width + 2, b.height + 2, 0x90FFFFFF);
             }
         }
+        if (drag != Drag.NONE) {
+            if (guideX >= 0) {
+                int gx = Math.min(guideX, width - 1);
+                ctx.fill(gx, 0, gx + 1, height, 0xC055FFFF);
+            }
+            if (guideY >= 0) {
+                int gy = Math.min(guideY, height - 1);
+                ctx.fill(0, gy, width, gy + 1, 0xC055FFFF);
+            }
+        }
         TextBox s = sel();
         if (s != null) {
             ctx.drawStrokedRectangle(s.x - 1, s.y - 1, s.width + 2, s.height + 2, 0xFFFFD700);
@@ -728,7 +928,7 @@ public class EditorScreen extends Screen {
             }
         }
 
-        String hint = "Drag: move | Corner: resize | Double-click: edit text | Arrows: nudge | Del: delete";
+        String hint = "Drag: move | Corner: resize | Double-click: edit text | Arrows: nudge | Ctrl+Z: undo | Del: delete";
         String shown = textRenderer.trimToWidth(hint, width - 8);
         // backing strip so the hint stays readable over the hotbar
         ctx.fill(0, height - 14, textRenderer.getWidth(shown) + 8, height, 0xB0000000);

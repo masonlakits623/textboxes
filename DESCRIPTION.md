@@ -19,6 +19,13 @@ Everything is edited in-game, and nothing goes in a config file by hand. Press *
 - Add, duplicate, delete, bring forward and send back from the toolbar.
 - Use the arrow keys to nudge a box pixel by pixel (hold Shift for 10px).
 - The settings panel can sit on the left or right, or be hidden so you can see the whole screen.
+- **Undo and redo** with Ctrl+Z and Ctrl+Y.
+- Boxes **snap** to screen edges, the center and each other while you drag. You can turn this off.
+
+### 🔷 Box shapes
+- Pick from **Rectangle**, **Rounded**, **Pill**, **Ellipse**, **Hexagon**, **Cut corners**, **Ribbon**, **Arrow** and **Speech bubble**.
+- Adjust corner radius, point depth or tail size with a slider, and move a speech bubble's tail along the edge.
+- Add a **gradient** background and a **drop shadow** to any shape.
 
 ### 🎨 Colors and opacity
 - Set the **background**, **text**, **border** and **image tint** separately.
@@ -29,6 +36,11 @@ Everything is edited in-game, and nothing goes in a config file by hand. Press *
 - **Default**, **Uniform**, **Galactic** (enchanting table), **Illageralt**, or any custom font from a resource pack.
 - Bold, italic, underline, strikethrough and shadow.
 - Scale, left/center/right and top/middle/bottom alignment, padding and line spacing.
+- **Mix fonts and colors in one box**: `{font:galactic}` switches font partway through a line, and `{#FF8800}` switches color. The **+ Font** and **+ Color** buttons insert these for you.
+
+### 📡 Live info
+- Show things that update by themselves: FPS, coordinates, facing, biome, time, day, health, ping and more.
+- Click **+ Info** in the text editor to pick one, or type it, like `{fps}` or `{coords}`.
 
 ### 🖼️ Images
 - Use your own PNG, JPG, GIF or BMP images as a box background.
@@ -63,6 +75,8 @@ You can change both keys in **Options → Controls**. Inside the editor:
 | Arrow keys (+ Shift) | Nudge it by 1px (or 10px) |
 | Delete | Remove it |
 | Ctrl + D | Duplicate it |
+| Ctrl + Z | Undo |
+| Ctrl + Y | Redo |
 
 ---
 
@@ -76,14 +90,16 @@ You can also type these straight into the text editor:
 | `{item:modid:some_item}` | An item from another mod |
 | `{item:paper\|5}` | Paper renamed to "5" (resource-pack textures apply) |
 | `{img:logo.png}` | An image from `config/textboxes/images/` |
+| `{font:galactic}` … `{font}` | Text in another font, then back to the box's font |
+| `{#FF8800}` … `{color}` | Text in another color, then back to the box's color |
+| `{fps}`, `{coords}`, `{biome}`, … | Live info (click **+ Info** for the full list) |
 
 If a token is mistyped, it shows in **red** so you can spot it and fix it.
 
 ---
 
 ## 📋 Requirements
-- Minecraft **1.21.11**
-- **Fabric Loader** 0.18.1 or newer
+- Minecraft **1.21.11** (Fabric Loader 0.18.1 or newer) or Minecraft **26.3** (Fabric Loader 0.20.1 or newer). Each version has its own jar.
 - **Fabric API**
 
 ## ❓ FAQ

@@ -13,13 +13,36 @@ public final class TextBoxRenderer {
     private TextBoxRenderer() {}
 
     public static void render(DrawContext ctx, TextRenderer tr, TextBox b) {
+        int bw = Math.max(0, Math.min(b.borderWidth, Math.min(b.width, b.height) / 2));
+        if (b.shape == null || b.shape == TextBox.Shape.RECTANGLE) {
+            renderRect(ctx, b, bw);
+        } else {
+            ShapeRenderer.render(ctx, b, bw);
+        }
+        if (b.textOpacity > 0f && !b.text.isEmpty()) {
+            int[] a = ShapeRenderer.textArea(b, bw);
+            drawText(ctx, tr, b, a[0], a[1], a[2], a[3]);
+        }
+    }
+
+    private static void renderRect(DrawContext ctx, TextBox b, int bw) {
         int x1 = b.x, y1 = b.y, x2 = b.x + b.width, y2 = b.y + b.height;
 
-        if (b.bgOpacity > 0f) {
+        if (b.boxShadow && b.shadowOpacity > 0f && b.shadowOffset > 0) {
+            int o = b.shadowOffset;
+            int c = TextBox.argb(b.shadowColor, b.shadowOpacity);
+            ctx.fill(x2, y1 + o, x2 + o, y2 + o, c);
+            ctx.fill(x1 + o, y2, x2, y2 + o, c);
+        }
+
+        if (b.gradient) {
+            if (b.bgOpacity > 0f || b.bgOpacity2 > 0f) {
+                ctx.fillGradient(x1, y1, x2, y2, TextBox.argb(b.bgColor, b.bgOpacity), TextBox.argb(b.bgColor2, b.bgOpacity2));
+            }
+        } else if (b.bgOpacity > 0f) {
             ctx.fill(x1, y1, x2, y2, TextBox.argb(b.bgColor, b.bgOpacity));
         }
 
-        int bw = Math.max(0, Math.min(b.borderWidth, Math.min(b.width, b.height) / 2));
         int ix1 = x1 + bw, iy1 = y1 + bw, ix2 = x2 - bw, iy2 = y2 - bw;
         int iw = ix2 - ix1, ih = iy2 - iy1;
 
@@ -34,10 +57,6 @@ public final class TextBoxRenderer {
             ctx.fill(x1, y2 - bw, x2, y2, c);
             ctx.fill(x1, y1 + bw, x1 + bw, y2 - bw, c);
             ctx.fill(x2 - bw, y1 + bw, x2, y2 - bw, c);
-        }
-
-        if (b.textOpacity > 0f && !b.text.isEmpty()) {
-            drawText(ctx, tr, b, ix1, iy1, ix2, iy2);
         }
     }
 

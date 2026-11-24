@@ -9,8 +9,9 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Style;
+import net.minecraft.text.StyleSpriteSource;
 import net.minecraft.text.Text;
-import net.minecraft.text.TextVisitFactory;
+import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import org.joml.Matrix3x2fStack;
@@ -26,12 +27,41 @@ import java.util.regex.Pattern;
  *   <li>{@code {item:paper|5}} - the item renamed to "5" (resource packs that key models on the
  *       custom name, like anvil-renamed items, will show their texture)</li>
  *   <li>{@code {img:logo.png}} - an image from config/textboxes/images/</li>
+ *   <li>{@code {font:galactic}} ... {@code {font}} - switch font for part of the text</li>
+ *   <li>{@code {#FF8800}} ... {@code {color}} - any hex color for part of the text</li>
+ *   <li>live values like {@code {fps}} or {@code {coords}}, see {@link Placeholders}</li>
  * </ul>
  * Legacy section-sign color codes keep working across tokens.
  */
 public final class InlineText {
-    public static final Pattern TOKEN = Pattern.compile("\\{(item|img):([^{}\\n]+)}");
+    /** Groups: 1 item/img, 2 its body, 3 "font", 4 font name, 5 hex color, 6 "color". */
+    public static final Pattern TOKEN = Pattern.compile(
+            "\\{(?:(item|img):([^{}\\n]+)|(font)(?::([^{}\\n]*))?|#([0-9a-fA-F]{6})|(color))}");
     private static final int PLACEHOLDER_BASE = 0xF0000; // supplementary private use area
+
+    /** Short names usable in {font:...}; anything else is read as a font id. */
+    public static final String[][] FONT_ALIASES = {
+            {"default", "minecraft:default"},
+            {"uniform", "minecraft:uniform"},
+            {"galactic", "minecraft:alt"},
+            {"alt", "minecraft:alt"},
+            {"illageralt", "minecraft:illageralt"},
+            {"illager", "minecraft:illageralt"},
+    };
+
+    /** Resolves a font alias or id, or returns null if it isn't a valid id. */
+    public static Identifier fontId(String name) {
+        String n = name.trim().toLowerCase(Locale.ROOT);
+        for (String[] a : FONT_ALIASES) {
+            if (a[0].equals(n)) return Identifier.tryParse(a[1]);
+        }
+        return n.isEmpty() ? null : Identifier.tryParse(n);
+    }
+
+    /** Changes the running style when a {font:..} / {#..} / {color} marker is reached. */
+    private interface StyleOp {
+        Style apply(Style current, Style base);
+    }
 
     sealed interface Atom permits Glyph, Icon {
         int width();
@@ -75,18 +105,19 @@ public final class InlineText {
     }
 
     public static Layout layout(TextBox b, TextRenderer tr, Style base, int availW) {
-        String key = b.text + '\u0000' + b.resolvedFont() + b.bold + b.italic + b.underline + b.strikethrough
+        String text = Placeholders.apply(b.text);
+        String key = text + '\u0000' + b.resolvedFont() + b.bold + b.italic + b.underline + b.strikethrough
                 + '|' + availW + '|' + b.iconSize + '|' + b.lineSpacing + '|' + ImageManager.generation;
         Cached c = CACHE.get(b);
         if (c != null && c.key().equals(key)) return c.layout();
-        Layout l = build(b, tr, base, availW);
+        Layout l = build(b, text, tr, base, availW);
         CACHE.put(b, new Cached(key, l));
         return l;
     }
 
-    private static Layout build(TextBox b, TextRenderer tr, Style base, int availW) {
+    private static Layout build(TextBox b, String text, TextRenderer tr, Style base, int availW) {
         List<Line> out = new ArrayList<>();
-        for (String raw : b.text.split("\n", -1)) {
+        for (String raw : text.split("\n", -1)) {
             List<Atom> atoms = parseLine(raw, tr, base, b.iconSize);
             wrap(atoms, availW, tr.fontHeight, out);
         }
@@ -98,39 +129,68 @@ public final class InlineText {
 
     private static List<Atom> parseLine(String raw, TextRenderer tr, Style base, int iconSize) {
         // Swap tokens for placeholder code points so one formatted-text pass keeps color codes continuous.
-        List<Atom> icons = new ArrayList<>();
-        List<String> failed = new ArrayList<>();
+        // Each marker is an Atom (icon), a StyleOp, or a String (a broken token, shown in red).
+        List<Object> marks = new ArrayList<>();
         StringBuilder sb = new StringBuilder();
         Matcher m = TOKEN.matcher(raw);
         int last = 0;
         while (m.find()) {
             sb.append(raw, last, m.start());
-            Atom icon = makeIcon(m.group(1), m.group(2), iconSize);
-            icons.add(icon);
-            failed.add(icon == null ? m.group() : null);
-            sb.appendCodePoint(PLACEHOLDER_BASE + icons.size() - 1);
+            Object mark = makeMark(m, iconSize);
+            marks.add(mark == null ? m.group() : mark);
+            sb.appendCodePoint(PLACEHOLDER_BASE + marks.size() - 1);
             last = m.end();
         }
         sb.append(raw, last, raw.length());
 
+        // Same rules as vanilla formatted text (section-sign codes), plus our style markers.
         List<Atom> atoms = new ArrayList<>();
-        TextVisitFactory.visitFormatted(sb.toString(), 0, base, base, (index, style, cp) -> {
+        String s = sb.toString();
+        Style style = base;
+        int i = 0;
+        while (i < s.length()) {
+            int cp = s.codePointAt(i);
+            if (cp == '§') {
+                if (i + 1 >= s.length()) break;
+                Formatting f = Formatting.byCode(s.charAt(i + 1));
+                if (f != null) style = f == Formatting.RESET ? base : style.withExclusiveFormatting(f);
+                i += 2;
+                continue;
+            }
+            i += Character.charCount(cp);
             int idx = cp - PLACEHOLDER_BASE;
-            if (idx >= 0 && idx < icons.size()) {
-                Atom icon = icons.get(idx);
-                if (icon != null) {
-                    atoms.add(icon);
+            if (idx >= 0 && idx < marks.size()) {
+                Object mark = marks.get(idx);
+                if (mark instanceof Atom a) {
+                    atoms.add(a);
+                } else if (mark instanceof StyleOp op) {
+                    style = op.apply(style, base);
                 } else {
-                    // Unknown item / missing image: show the token in red so it can be fixed.
                     Style err = style.withColor(Formatting.RED);
-                    failed.get(idx).codePoints().forEach(c -> atoms.add(glyph(tr, c, err)));
+                    ((String) mark).codePoints().forEach(c -> atoms.add(glyph(tr, c, err)));
                 }
             } else {
                 atoms.add(glyph(tr, cp, style));
             }
-            return true;
-        });
+        }
         return atoms;
+    }
+
+    private static Object makeMark(Matcher m, int iconSize) {
+        if (m.group(1) != null) return makeIcon(m.group(1), m.group(2), iconSize);
+        if (m.group(3) != null) {
+            String name = m.group(4);
+            if (name == null || name.isBlank()) return (StyleOp) (cur, base) -> cur.withFont(base.getFont());
+            Identifier id = fontId(name);
+            if (id == null) return null;
+            StyleSpriteSource.Font font = new StyleSpriteSource.Font(id);
+            return (StyleOp) (cur, base) -> cur.withFont(font);
+        }
+        if (m.group(5) != null) {
+            TextColor color = TextColor.fromRgb(Integer.parseInt(m.group(5), 16));
+            return (StyleOp) (cur, base) -> cur.withColor(color);
+        }
+        return (StyleOp) (cur, base) -> cur.withColor(base.getColor());
     }
 
     private static Glyph glyph(TextRenderer tr, int cp, Style style) {

@@ -56,6 +56,23 @@ public class TextboxConfig {
         }
     }
 
+    /** Snapshot of all boxes, used for undo/redo in the editor. */
+    public String snapshot() {
+        return GSON.toJson(boxes);
+    }
+
+    /** Replaces the boxes with a snapshot taken by {@link #snapshot()}. */
+    public void restore(String snapshot) {
+        TextBox[] arr = GSON.fromJson(snapshot, TextBox[].class);
+        boxes.clear();
+        if (arr == null) return;
+        for (TextBox b : arr) {
+            if (b == null) continue;
+            b.sanitize();
+            boxes.add(b);
+        }
+    }
+
     public static TextBox copy(TextBox box) {
         TextBox c = GSON.fromJson(GSON.toJson(box), TextBox.class);
         c.sanitize();

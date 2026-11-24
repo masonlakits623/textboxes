@@ -6,7 +6,7 @@
 
 <p align="center">
   Put your own textboxes anywhere on your Minecraft HUD, with colors, fonts, images and item icons right in the text.<br>
-  <b>Fabric · Minecraft 1.21.11 · Client-side</b>
+  <b>Fabric · Minecraft 1.21.11 and 26.3 · Client-side</b>
 </p>
 
 <p align="center">
@@ -30,10 +30,22 @@ Everything is edited in-game, and nothing goes in a config file by hand. Press *
 - Add, duplicate, delete, bring forward and send back from the toolbar.
 - Use the arrow keys to nudge a box pixel by pixel (hold Shift for 10px).
 - The settings panel can sit on the left or right, or be hidden so you can see the whole screen.
+- **Undo and redo** with Ctrl+Z and Ctrl+Y.
+- Boxes **snap** to screen edges, the center and each other while you drag. You can turn this off.
 
 <p align="center">
   <img src="screenshots/02-editor-text.png" width="49%" alt="Editor, text settings">
   <img src="screenshots/03-editor-colors.png" width="49%" alt="Editor, color settings">
+</p>
+
+### 🔷 Box shapes
+- Pick from **Rectangle**, **Rounded**, **Pill**, **Ellipse**, **Hexagon**, **Cut corners**, **Ribbon**, **Arrow** and **Speech bubble**.
+- Adjust corner radius, point depth or tail size with a slider, and move a speech bubble's tail along the edge.
+- Add a **gradient** background and a **drop shadow** to any shape.
+
+<p align="center">
+  <img src="screenshots/10-shapes.png" width="49%" alt="Every box shape">
+  <img src="screenshots/11-editor-shapes.png" width="49%" alt="Shape settings in the editor">
 </p>
 
 ### 🎨 Colors and opacity
@@ -45,6 +57,20 @@ Everything is edited in-game, and nothing goes in a config file by hand. Press *
 - **Default**, **Uniform**, **Galactic** (enchanting table), **Illageralt**, or any custom font from a resource pack.
 - Bold, italic, underline, strikethrough and shadow.
 - Scale, left/center/right and top/middle/bottom alignment, padding and line spacing.
+- **Mix fonts and colors in one box**: `{font:galactic}` switches font partway through a line, and `{#FF8800}` switches color. The **+ Font** and **+ Color** buttons insert these for you.
+
+<p align="center">
+  <img src="screenshots/12-text-editor-fonts.png" width="49%" alt="Text editor with font and color tokens">
+  <img src="screenshots/13-font-picker.png" width="49%" alt="Font picker">
+</p>
+
+### 📡 Live info
+- Show things that update by themselves: FPS, coordinates, facing, biome, time, day, health, ping and more.
+- Click **+ Info** in the text editor to pick one, or type it, like `{fps}` or `{coords}`.
+
+<p align="center">
+  <img src="screenshots/14-info-picker.png" width="70%" alt="Live info picker">
+</p>
 
 ### 🖼️ Images
 - Use your own PNG, JPG, GIF or BMP images as a box background.
@@ -91,6 +117,8 @@ You can change both keys in **Options → Controls**. Inside the editor:
 | Arrow keys (+ Shift) | Nudge it by 1px (or 10px) |
 | Delete | Remove it |
 | Ctrl + D | Duplicate it |
+| Ctrl + Z | Undo |
+| Ctrl + Y | Redo |
 
 ## 🧩 Text tokens
 
@@ -102,20 +130,25 @@ You can also type these straight into the text editor:
 | `{item:modid:some_item}` | An item from another mod |
 | `{item:paper\|5}` | Paper renamed to "5" (resource-pack textures apply) |
 | `{img:logo.png}` | An image from `config/textboxes/images/` |
+| `{font:galactic}` … `{font}` | Text in another font, then back to the box's font |
+| `{#FF8800}` … `{color}` | Text in another color, then back to the box's color |
+| `{fps}`, `{coords}`, `{biome}`, … | Live info (click **+ Info** for the full list) |
 
 If a token is mistyped, it shows in **red** so you can spot it and fix it.
 
 ## 📥 Installing
 
-1. Install [Fabric Loader](https://fabricmc.net/use/) 0.18.1 or newer for Minecraft **1.21.11**.
-2. Put [Fabric API](https://modrinth.com/mod/fabric-api) and the Textboxes jar in your `mods` folder.
+1. Install [Fabric Loader](https://fabricmc.net/use/) for your Minecraft version:
+   - Minecraft **1.21.11**: Loader 0.18.1 or newer, and the `textboxes-1.1.0.jar` file.
+   - Minecraft **26.3**: Loader 0.20.1 or newer, and the `textboxes-1.1.0+26.3.jar` file.
+2. Put [Fabric API](https://modrinth.com/mod/fabric-api) and the matching Textboxes jar in your `mods` folder.
 3. Start the game and press **J**.
 
 Textboxes is client-side only, so it works on any server and the server doesn't need it installed. Your boxes are saved in `config/textboxes.json`.
 
 ## 🛠️ Building from source
 
-You need Java 21. Then run:
+This branch builds the Minecraft 1.21.11 version and needs Java 21. The Minecraft 26.3 version is on the `mc/26.3` branch and needs Java 25. Then run:
 
 ```bash
 ./gradlew build

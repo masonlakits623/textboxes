@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.0
+
+Now for **Minecraft 1.21.11** and **Minecraft 26.3**. They are two separate jars, so pick the one that matches your game.
+
+### Box shapes
+- Nine shapes: Rectangle, Rounded, Pill, Ellipse, Hexagon, Cut corners, Ribbon, Arrow and Speech bubble.
+- Shapes are drawn smoothly at your screen's real resolution, and images and borders follow the shape.
+- Rounded, Hexagon, Cut corners, Ribbon and Arrow have a size slider. The Speech bubble tail has size and position sliders.
+- Text stays inside the shape. For example, it stays out of the arrow's point.
+
+### Different fonts and colors in the same box
+- Switch fonts partway through the text with `{font:galactic}`, then go back to the box's font with `{font}`.
+- Switch text color partway through with `{#FF8800}`, then go back with `{color}`.
+- New **+ Font** and **+ Color** buttons in the text editor insert these for you. They can also take a custom font id or hex code.
+
+### Live info
+- Tokens that update by themselves: `{fps}`, `{coords}`, `{x}` `{y}` `{z}`, `{facing}`, `{biome}`, `{dimension}`, `{light}`, `{time}`, `{day}`, `{clock}`, `{date}`, `{player}`, `{health}`, `{food}`, `{armor}`, `{level}`, `{ping}`, `{server}`.
+- The **+ Info** button lists them all.
+
+### Box style
+- Gradient backgrounds, from the background color to a second color with its own opacity.
+- Drop shadows with their own color, opacity and offset.
+
+### Editor
+- **Undo and redo**: toolbar buttons, plus Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z). Typing or dragging counts as one step.
+- **Snapping**: boxes snap to the screen edges, the screen center and other boxes while you drag, with guide lines. Toggle it with **Snap: On/Off**.
+
+### Minecraft 26.3
+- Ported to Minecraft 26.3 (Fabric Loader 0.20.1+, Fabric API, Java 25). It has the same features and the same config file as the 1.21.11 version.
+
 ## 1.0.0 (first release)
 
 For Minecraft 1.21.11 on Fabric (Loader 0.18.1+, Fabric API required). Client-side only, so it works on any server.

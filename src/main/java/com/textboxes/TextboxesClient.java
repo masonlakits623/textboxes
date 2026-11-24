@@ -4,6 +4,7 @@ import com.textboxes.gui.EditorScreen;
 import com.textboxes.gui.ImagePickerScreen;
 import com.textboxes.gui.ItemPickerScreen;
 import com.textboxes.gui.TextEditScreen;
+import com.textboxes.gui.TokenPickerScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -65,7 +66,8 @@ public class TextboxesClient implements ClientModInitializer {
         if (client.currentScreen instanceof EditorScreen
                 || client.currentScreen instanceof TextEditScreen
                 || client.currentScreen instanceof ImagePickerScreen
-                || client.currentScreen instanceof ItemPickerScreen) return;
+                || client.currentScreen instanceof ItemPickerScreen
+                || client.currentScreen instanceof TokenPickerScreen) return;
 
         List<TextBox> boxes = CONFIG.boxes;
         boolean first = true;
