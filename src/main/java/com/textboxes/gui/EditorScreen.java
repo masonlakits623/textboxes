@@ -5,23 +5,23 @@ import com.textboxes.TextBox;
 import com.textboxes.TextBoxRenderer;
 import com.textboxes.TextboxConfig;
 import com.textboxes.TextboxesClient;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.ClickableWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.text.OrderedText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 
 /** Main editor: toolbar on top, property panel on the side, boxes are dragged/resized directly. */
 public class EditorScreen extends Screen {
@@ -71,7 +71,7 @@ public class EditorScreen extends Screen {
     private int historyIndex;
     private String pendingSnapshot;
     private int pendingTicks;
-    private ButtonWidget undoButton, redoButton;
+    private Button undoButton, redoButton;
     private int guideX = -1, guideY = -1;
     private int selected = -1;
     private Drag drag = Drag.NONE;
@@ -83,11 +83,11 @@ public class EditorScreen extends Screen {
     private final List<Label> labels = new ArrayList<>();
 
     private ValueSlider rSlider, gSlider, bSlider, aSlider;
-    private TextFieldWidget hexField;
+    private EditBox hexField;
     private boolean syncing;
 
     public EditorScreen() {
-        super(Text.literal("Textboxes Editor"));
+        super(Component.literal("Textboxes Editor"));
         history.add(config.snapshot());
         historyIndex = 0;
     }
@@ -143,7 +143,7 @@ public class EditorScreen extends Screen {
         pendingSnapshot = null;
         if (selected >= config.boxes.size()) selected = config.boxes.size() - 1;
         config.save();
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void updateUndoButtons() {
@@ -161,7 +161,7 @@ public class EditorScreen extends Screen {
         selected = index;
         tab = Tab.values()[Math.floorMod(tabIndex, Tab.values().length)];
         scroll = 0;
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private TextBox sel() {
@@ -214,30 +214,30 @@ public class EditorScreen extends Screen {
         updateUndoButtons();
         tool("Snap: " + (snap ? "On" : "Off"), 50, true, () -> {
             snap = !snap;
-            clearAndInit();
+            rebuildWidgets();
         });
         String pm = switch (panelMode) { case RIGHT -> "Right"; case LEFT -> "Left"; case HIDDEN -> "Off"; };
         tool("Panel: " + pm, 62, true, () -> {
             panelMode = PanelMode.values()[(panelMode.ordinal() + 1) % PanelMode.values().length];
-            clearAndInit();
+            rebuildWidgets();
         });
         tool("HUD: " + (config.hudVisible ? "On" : "Off"), 50, true, () -> {
             config.hudVisible = !config.hudVisible;
-            clearAndInit();
+            rebuildWidgets();
         });
-        tool("Done", 36, true, this::close);
+        tool("Done", 36, true, this::onClose);
         toolbarBottom = ty + WH;
     }
 
-    private ButtonWidget tool(String label, int w, boolean active, Runnable action) {
+    private Button tool(String label, int w, boolean active, Runnable action) {
         if (tx + w > width - 4 && tx > 4) {
             tx = 4;
             ty += ROW;
         }
-        ButtonWidget btn = ButtonWidget.builder(Text.literal(label), x -> action.run())
-                .dimensions(tx, ty, w, WH).build();
+        Button btn = Button.builder(Component.literal(label), x -> action.run())
+                .bounds(tx, ty, w, WH).build();
         btn.active = active;
-        addDrawableChild(btn);
+        addRenderableWidget(btn);
         tx += w + 2;
         return btn;
     }
@@ -253,51 +253,50 @@ public class EditorScreen extends Screen {
         return y >= contentTop && y + WH <= panelBottom;
     }
 
-    private <T extends ClickableWidget> T panel(T widget, int row) {
+    private <T extends AbstractWidget> T panel(T widget, int row) {
         widget.setY(rowY(row));
         widget.visible = rowVisible(row);
-        return addDrawableChild(widget);
+        return addRenderableWidget(widget);
     }
 
     private void label(int row, int x, String text, int color) {
         labels.add(new Label(row, x, text, color));
     }
 
-    private ButtonWidget button(int x, int w, String text, Runnable action) {
-        return ButtonWidget.builder(Text.literal(text), btn -> action.run()).dimensions(x, 0, w, WH).build();
+    private Button button(int x, int w, String text, Runnable action) {
+        return Button.builder(Component.literal(text), btn -> action.run()).bounds(x, 0, w, WH).build();
     }
 
-    private static Text onOff(String name, boolean on) {
-        return Text.literal(name + ": ").append(Text.literal(on ? "On" : "Off")
-                .formatted(on ? Formatting.GREEN : Formatting.RED));
+    private static Component onOff(String name, boolean on) {
+        return Component.literal(name + ": ").append(Component.literal(on ? "On" : "Off")
+                .withStyle(on ? ChatFormatting.GREEN : ChatFormatting.RED));
     }
 
-    private ButtonWidget toggle(int x, int w, String name, BooleanSupplier get, Consumer<Boolean> set) {
-        return ButtonWidget.builder(onOff(name, get.getAsBoolean()), btn -> {
+    private Button toggle(int x, int w, String name, BooleanSupplier get, Consumer<Boolean> set) {
+        return Button.builder(onOff(name, get.getAsBoolean()), btn -> {
             boolean v = !get.getAsBoolean();
             set.accept(v);
             btn.setMessage(onOff(name, v));
-        }).dimensions(x, 0, w, WH).build();
+        }).bounds(x, 0, w, WH).build();
     }
 
-    private ButtonWidget styleToggle(int x, int w, String letter, Formatting fmt, BooleanSupplier get, Consumer<Boolean> set) {
-        return ButtonWidget.builder(styleText(letter, fmt, get.getAsBoolean()), btn -> {
+    private Button styleToggle(int x, int w, String letter, ChatFormatting fmt, BooleanSupplier get, Consumer<Boolean> set) {
+        return Button.builder(styleText(letter, fmt, get.getAsBoolean()), btn -> {
             boolean v = !get.getAsBoolean();
             set.accept(v);
             btn.setMessage(styleText(letter, fmt, v));
-        }).dimensions(x, 0, w, WH).build();
+        }).bounds(x, 0, w, WH).build();
     }
 
-    private static Text styleText(String letter, Formatting fmt, boolean on) {
-        return Text.literal(letter).formatted(fmt, on ? Formatting.GREEN : Formatting.DARK_GRAY);
+    private static Component styleText(String letter, ChatFormatting fmt, boolean on) {
+        return Component.literal(letter).withStyle(fmt, on ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY);
     }
 
-    private TextFieldWidget numField(int x, int w, int value, IntConsumer setter) {
-        TextFieldWidget f = new TextFieldWidget(textRenderer, x, 0, w, WH, Text.empty());
+    private EditBox numField(int x, int w, int value, IntConsumer setter) {
+        EditBox f = new EditBox(font, x, 0, w, WH, Component.empty());
         f.setMaxLength(6);
-        f.setText(Integer.toString(value));
-        f.setTextPredicate(s -> s.matches("-?\\d{0,5}"));
-        f.setChangedListener(s -> {
+        f.setValue(Integer.toString(value));
+        Fields.respond(f, s -> s.matches("-?\\d{0,5}"), s -> {
             try {
                 setter.accept(Integer.parseInt(s));
             } catch (NumberFormatException ignored) {
@@ -318,13 +317,13 @@ public class EditorScreen extends Screen {
         Tab[] tabs = Tab.values();
         for (int i = 0; i < tabs.length; i++) {
             Tab t = tabs[i];
-            ButtonWidget btn = ButtonWidget.builder(Text.literal(t.title), x -> {
+            Button btn = Button.builder(Component.literal(t.title), x -> {
                 tab = t;
                 scroll = 0;
-                clearAndInit();
-            }).dimensions(px + i * (tw + 2), panelY + 4, tw, WH).build();
+                rebuildWidgets();
+            }).bounds(px + i * (tw + 2), panelY + 4, tw, WH).build();
             btn.active = t != tab;
-            addDrawableChild(btn);
+            addRenderableWidget(btn);
         }
         switch (tab) {
             case BOX -> buildBoxTab(b);
@@ -350,19 +349,19 @@ public class EditorScreen extends Screen {
         panel(toggle(px, iw, "Visible in HUD", () -> b.visible, v -> b.visible = v), 3);
         panel(button(px, half, "Center H", () -> {
             b.x = (width - b.width) / 2;
-            clearAndInit();
+            rebuildWidgets();
         }), 4);
         panel(button(px + half + 4, half, "Center V", () -> {
             b.y = (height - b.height) / 2;
-            clearAndInit();
+            rebuildWidgets();
         }), 4);
-        ButtonWidget fit = panel(button(px, iw, "Fit to image aspect", () -> fitToAspect(b)), 5);
+        Button fit = panel(button(px, iw, "Fit to image aspect", () -> fitToAspect(b)), 5);
         fit.active = !b.image.isEmpty();
 
         panel(button(px, iw, "Shape: " + b.shape.title, () -> {
             TextBox.Shape[] all = TextBox.Shape.values();
             b.shape = all[(b.shape.ordinal() + 1) % all.length];
-            clearAndInit();
+            rebuildWidgets();
         }), 6);
         String sizeLabel = b.shape.sizeLabel != null ? b.shape.sizeLabel : "Shape size";
         ValueSlider size = panel(new ValueSlider(px, 0, iw, WH, sizeLabel, 0, 32, 1, b.shapeSize,
@@ -383,16 +382,15 @@ public class EditorScreen extends Screen {
         panel(button(px, iw, "Font: " + TextBox.FONT_NAMES[b.fontIndex()], () -> {
             int next = (b.fontIndex() + 1) % TextBox.FONT_IDS.length;
             b.font = TextBox.FONT_IDS[next];
-            clearAndInit();
+            rebuildWidgets();
         }), 1);
 
         boolean custom = "custom".equals(b.font);
-        TextFieldWidget fontField = new TextFieldWidget(textRenderer, px, 0, iw, WH, Text.literal("Custom font"));
+        EditBox fontField = new EditBox(font, px, 0, iw, WH, Component.literal("Custom font"));
         fontField.setMaxLength(128);
-        fontField.setText(b.customFont);
-        fontField.setPlaceholder(Text.literal("namespace:font_id").formatted(Formatting.DARK_GRAY));
-        fontField.setTextPredicate(s -> s.matches("[a-z0-9_.:/-]*"));
-        fontField.setChangedListener(s -> b.customFont = s.isBlank() ? "minecraft:default" : s.trim());
+        fontField.setValue(b.customFont);
+        fontField.setHint(Component.literal("namespace:font_id").withStyle(ChatFormatting.DARK_GRAY));
+        Fields.respond(fontField, s -> s.matches("[a-z0-9_.:/-]*"), s -> b.customFont = s.isBlank() ? "minecraft:default" : s.trim());
         fontField.setEditable(custom);
         fontField.active = custom;
         panel(fontField, 2);
@@ -401,19 +399,19 @@ public class EditorScreen extends Screen {
                 v -> String.format("%.2fx", v), v -> b.scale = (float) v), 3);
 
         int q = (iw - 6) / 4;
-        panel(styleToggle(px, q, "B", Formatting.BOLD, () -> b.bold, v -> b.bold = v), 4);
-        panel(styleToggle(px + (q + 2), q, "I", Formatting.ITALIC, () -> b.italic, v -> b.italic = v), 4);
-        panel(styleToggle(px + 2 * (q + 2), q, "U", Formatting.UNDERLINE, () -> b.underline, v -> b.underline = v), 4);
-        panel(styleToggle(px + 3 * (q + 2), q, "S", Formatting.STRIKETHROUGH, () -> b.strikethrough, v -> b.strikethrough = v), 4);
+        panel(styleToggle(px, q, "B", ChatFormatting.BOLD, () -> b.bold, v -> b.bold = v), 4);
+        panel(styleToggle(px + (q + 2), q, "I", ChatFormatting.ITALIC, () -> b.italic, v -> b.italic = v), 4);
+        panel(styleToggle(px + 2 * (q + 2), q, "U", ChatFormatting.UNDERLINE, () -> b.underline, v -> b.underline = v), 4);
+        panel(styleToggle(px + 3 * (q + 2), q, "S", ChatFormatting.STRIKETHROUGH, () -> b.strikethrough, v -> b.strikethrough = v), 4);
 
         panel(toggle(px, half, "Shadow", () -> b.shadow, v -> b.shadow = v), 5);
         panel(button(px + half + 4, half, "Align: " + pretty(b.align), () -> {
             b.align = TextBox.Align.values()[(b.align.ordinal() + 1) % TextBox.Align.values().length];
-            clearAndInit();
+            rebuildWidgets();
         }), 5);
         panel(button(px, iw, "Vertical: " + pretty(b.valign), () -> {
             b.valign = TextBox.VAlign.values()[(b.valign.ordinal() + 1) % TextBox.VAlign.values().length];
-            clearAndInit();
+            rebuildWidgets();
         }), 6);
         panel(new ValueSlider(px, 0, iw, WH, "Padding", 0, 32, 1, b.padding,
                 ValueSlider::fmtInt, v -> b.padding = (int) Math.round(v)), 7);
@@ -426,7 +424,7 @@ public class EditorScreen extends Screen {
     private void buildColorTab(TextBox b) {
         panel(button(px, iw, "Editing: " + colorTarget.title, () -> {
             colorTarget = ColorTarget.values()[(colorTarget.ordinal() + 1) % ColorTarget.values().length];
-            clearAndInit();
+            rebuildWidgets();
         }), 0);
 
         int rgb = getRgb(b);
@@ -440,11 +438,10 @@ public class EditorScreen extends Screen {
                 ValueSlider::fmtPercent, v -> setOpacity(b, (float) (v / 100.0))), 4);
 
         label(5, px, "Hex #", 0xFFCCCCCC);
-        hexField = new TextFieldWidget(textRenderer, px + 30, 0, 52, WH, Text.literal("Hex"));
+        hexField = new EditBox(font, px + 30, 0, 52, WH, Component.literal("Hex"));
         hexField.setMaxLength(6);
-        hexField.setText(String.format("%06X", rgb));
-        hexField.setTextPredicate(s -> s.matches("[0-9a-fA-F]{0,6}"));
-        hexField.setChangedListener(s -> {
+        hexField.setValue(String.format("%06X", rgb));
+        Fields.respond(hexField, s -> s.matches("[0-9a-fA-F]{0,6}"), s -> {
             if (syncing || s.length() != 6) return;
             int c = Integer.parseInt(s, 16);
             setRgb(b, c);
@@ -455,14 +452,14 @@ public class EditorScreen extends Screen {
         panel(toggle(px, iw, "Gradient background", () -> b.gradient, v -> {
             b.gradient = v;
             if (v && colorTarget == ColorTarget.BACKGROUND) colorTarget = ColorTarget.GRADIENT;
-            clearAndInit();
+            rebuildWidgets();
         }), 8);
     }
 
     private void buildImageTab(TextBox b) {
         int half = (iw - 4) / 2;
         panel(button(px, iw, "Choose image...", () -> {
-            if (client != null) client.setScreen(new ImagePickerScreen(this, b.image, true, name -> b.image = name));
+            if (minecraft != null) minecraft.gui.setScreen(new ImagePickerScreen(this, b.image, true, name -> b.image = name));
         }), 0);
 
         String name;
@@ -477,26 +474,26 @@ public class EditorScreen extends Screen {
             name = "Image: " + b.image;
             color = 0xFFFFFFFF;
         }
-        label(1, px, textRenderer.trimToWidth(name, iw), color);
+        label(1, px, font.plainSubstrByWidth(name, iw), color);
 
         panel(button(px, half, "Fit: " + pretty(b.imageFit), () -> {
             b.imageFit = TextBox.ImageFit.values()[(b.imageFit.ordinal() + 1) % TextBox.ImageFit.values().length];
-            clearAndInit();
+            rebuildWidgets();
         }), 2);
-        ButtonWidget clear = panel(button(px + half + 4, half, "Clear", () -> {
+        Button clear = panel(button(px + half + 4, half, "Clear", () -> {
             b.image = "";
-            clearAndInit();
+            rebuildWidgets();
         }), 2);
         clear.active = !b.image.isEmpty();
 
         panel(new ValueSlider(px, 0, iw, WH, "Image opacity", 0, 100, 1, b.imageOpacity * 100.0,
                 ValueSlider::fmtPercent, v -> b.imageOpacity = (float) (v / 100.0)), 3);
-        ButtonWidget fit = panel(button(px, iw, "Fit box to image aspect", () -> fitToAspect(b)), 4);
+        Button fit = panel(button(px, iw, "Fit box to image aspect", () -> fitToAspect(b)), 4);
         fit.active = !b.image.isEmpty();
         panel(button(px, half, "Open folder", ImageManager::openFolder), 5);
         panel(button(px + half + 4, half, "Reload", () -> {
             ImageManager.reload();
-            clearAndInit();
+            rebuildWidgets();
         }), 5);
     }
 
@@ -558,7 +555,7 @@ public class EditorScreen extends Screen {
     private void syncHex(int rgb) {
         if (hexField == null) return;
         syncing = true;
-        hexField.setText(String.format("%06X", rgb & 0xFFFFFF));
+        hexField.setValue(String.format("%06X", rgb & 0xFFFFFF));
         syncing = false;
     }
 
@@ -594,7 +591,7 @@ public class EditorScreen extends Screen {
         config.boxes.add(b);
         selected = config.boxes.size() - 1;
         config.save();
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void duplicate() {
@@ -606,7 +603,7 @@ public class EditorScreen extends Screen {
         config.boxes.add(selected + 1, c);
         selected++;
         config.save();
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void deleteSelected() {
@@ -614,7 +611,7 @@ public class EditorScreen extends Screen {
         config.boxes.remove(selected);
         selected = Math.min(selected, config.boxes.size() - 1);
         config.save();
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void moveLayer(int dir) {
@@ -623,7 +620,7 @@ public class EditorScreen extends Screen {
         TextBox b = config.boxes.remove(selected);
         config.boxes.add(to, b);
         selected = to;
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void fitToAspect(TextBox b) {
@@ -632,11 +629,11 @@ public class EditorScreen extends Screen {
         int bw = b.borderWidth;
         int innerW = Math.max(1, b.width - 2 * bw);
         b.height = Math.max(4, Math.round(innerW * (float) img.height() / img.width()) + 2 * bw);
-        clearAndInit();
+        rebuildWidgets();
     }
 
     private void openTextEditor(TextBox b) {
-        if (client != null) client.setScreen(new TextEditScreen(this, b));
+        if (minecraft != null) minecraft.gui.setScreen(new TextEditScreen(this, b));
     }
 
     // ------------------------------------------------------------------ input
@@ -654,7 +651,7 @@ public class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         if (super.mouseClicked(click, doubled)) return true;
         double mx = click.x(), my = click.y();
 
@@ -687,19 +684,19 @@ public class EditorScreen extends Screen {
                 dragOffX = (int) mx - b.x;
                 dragOffY = (int) my - b.y;
             }
-            if (changed) clearAndInit();
+            if (changed) rebuildWidgets();
             return true;
         }
 
         if (selected != -1) {
             selected = -1;
-            clearAndInit();
+            rebuildWidgets();
         }
         return true;
     }
 
     @Override
-    public boolean mouseDragged(Click click, double deltaX, double deltaY) {
+    public boolean mouseDragged(MouseButtonEvent click, double deltaX, double deltaY) {
         TextBox b = sel();
         if (drag != Drag.NONE && b != null) {
             int mx = (int) click.x(), my = (int) click.y();
@@ -780,13 +777,13 @@ public class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseReleased(Click click) {
+    public boolean mouseReleased(MouseButtonEvent click) {
         if (drag != Drag.NONE) {
             drag = Drag.NONE;
             guideX = guideY = -1;
             recordNow();
             config.save();
-            clearAndInit();
+            rebuildWidgets();
             return true;
         }
         return super.mouseReleased(click);
@@ -798,7 +795,7 @@ public class EditorScreen extends Screen {
             int ns = Math.max(0, Math.min(maxScroll(), scroll - (int) Math.signum(verticalAmount) * ROW));
             if (ns != scroll) {
                 scroll = ns;
-                clearAndInit();
+                rebuildWidgets();
             }
             return true;
         }
@@ -806,16 +803,16 @@ public class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(KeyInput input) {
-        boolean typing = getFocused() instanceof TextFieldWidget tf && tf.isFocused();
-        boolean ctrlDown = (input.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0;
+    public boolean keyPressed(KeyEvent input) {
+        boolean typing = getFocused() instanceof EditBox tf && tf.isFocused();
+        boolean ctrlDown = (input.modifiers() & InputConstants.MOD_CONTROL) != 0;
         if (!typing && ctrlDown) {
-            boolean shiftDown = (input.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0;
-            if (input.key() == GLFW.GLFW_KEY_Z) {
+            boolean shiftDown = (input.modifiers() & InputConstants.MOD_SHIFT) != 0;
+            if (input.key() == InputConstants.KEY_Z) {
                 if (shiftDown) redo(); else undo();
                 return true;
             }
-            if (input.key() == GLFW.GLFW_KEY_Y) {
+            if (input.key() == InputConstants.KEY_Y) {
                 redo();
                 return true;
             }
@@ -823,19 +820,19 @@ public class EditorScreen extends Screen {
         TextBox b = sel();
         if (!typing && b != null) {
             int key = input.key();
-            boolean shift = (input.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0;
-            boolean ctrl = (input.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0;
+            boolean shift = (input.modifiers() & InputConstants.MOD_SHIFT) != 0;
+            boolean ctrl = (input.modifiers() & InputConstants.MOD_CONTROL) != 0;
             int step = shift ? 10 : 1;
             switch (key) {
-                case GLFW.GLFW_KEY_LEFT -> { b.x -= step; clearAndInit(); return true; }
-                case GLFW.GLFW_KEY_RIGHT -> { b.x += step; clearAndInit(); return true; }
-                case GLFW.GLFW_KEY_UP -> { b.y -= step; clearAndInit(); return true; }
-                case GLFW.GLFW_KEY_DOWN -> { b.y += step; clearAndInit(); return true; }
-                case GLFW.GLFW_KEY_DELETE -> { deleteSelected(); return true; }
-                case GLFW.GLFW_KEY_D -> {
+                case InputConstants.KEY_LEFT -> { b.x -= step; rebuildWidgets(); return true; }
+                case InputConstants.KEY_RIGHT -> { b.x += step; rebuildWidgets(); return true; }
+                case InputConstants.KEY_UP -> { b.y -= step; rebuildWidgets(); return true; }
+                case InputConstants.KEY_DOWN -> { b.y += step; rebuildWidgets(); return true; }
+                case InputConstants.KEY_DELETE -> { deleteSelected(); return true; }
+                case InputConstants.KEY_D -> {
                     if (ctrl) { duplicate(); return true; }
                 }
-                case GLFW.GLFW_KEY_ENTER -> { openTextEditor(b); return true; }
+                case InputConstants.KEY_RETURN -> { openTextEditor(b); return true; }
                 default -> { }
             }
         }
@@ -845,35 +842,35 @@ public class EditorScreen extends Screen {
     // ------------------------------------------------------------------ render
 
     @Override
-    public void renderBackground(DrawContext context, int mouseX, int mouseY, float deltaTicks) {
+    public void extractBackground(GuiGraphicsExtractor context, int mouseX, int mouseY, float deltaTicks) {
         // Keep the world visible behind the editor (no blur / dim).
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         if (dirty) {
             dirty = false;
-            clearAndInit();
+            rebuildWidgets();
         }
 
         List<TextBox> boxes = config.boxes;
         for (int i = 0; i < boxes.size(); i++) {
-            if (i > 0) ctx.createNewRootLayer();
-            TextBoxRenderer.render(ctx, textRenderer, boxes.get(i));
+            if (i > 0) ctx.nextStratum();
+            TextBoxRenderer.render(ctx, font, boxes.get(i));
         }
-        ctx.createNewRootLayer();
+        ctx.nextStratum();
 
         // Overlays: hidden markers, hover, selection, resize handle
         int hover = drag == Drag.NONE && !inPanel(mouseX, mouseY) ? boxAt(mouseX, mouseY) : -1;
         for (int i = 0; i < boxes.size(); i++) {
             TextBox b = boxes.get(i);
             if (!b.visible) {
-                ctx.drawStrokedRectangle(b.x, b.y, b.width, b.height, 0xC0FF5555);
+                ctx.outline(b.x, b.y, b.width, b.height, 0xC0FF5555);
                 int ly = b.y >= 11 ? b.y - 10 : b.y + b.height + 2;
-                ctx.drawText(textRenderer, Text.literal("hidden"), b.x, ly, 0xFFFF5555, true);
+                ctx.text(font, Component.literal("hidden"), b.x, ly, 0xFFFF5555, true);
             }
             if (i == hover && i != selected) {
-                ctx.drawStrokedRectangle(b.x - 1, b.y - 1, b.width + 2, b.height + 2, 0x90FFFFFF);
+                ctx.outline(b.x - 1, b.y - 1, b.width + 2, b.height + 2, 0x90FFFFFF);
             }
         }
         if (drag != Drag.NONE) {
@@ -888,34 +885,34 @@ public class EditorScreen extends Screen {
         }
         TextBox s = sel();
         if (s != null) {
-            ctx.drawStrokedRectangle(s.x - 1, s.y - 1, s.width + 2, s.height + 2, 0xFFFFD700);
+            ctx.outline(s.x - 1, s.y - 1, s.width + 2, s.height + 2, 0xFFFFD700);
             int hx = s.x + s.width, hy = s.y + s.height;
             ctx.fill(hx - HANDLE, hy - HANDLE, hx + 1, hy + 1, 0xFFFFD700);
             String dims = s.width + "x" + s.height;
-            ctx.drawText(textRenderer, Text.literal(dims), s.x, s.y + s.height + 3, 0xFFFFD700, true);
+            ctx.text(font, Component.literal(dims), s.x, s.y + s.height + 3, 0xFFFFD700, true);
         }
 
         if (panelVisible()) {
             ctx.fill(panelX, panelY, panelX + PANEL_W, panelBottom, 0xD0101018);
-            ctx.drawStrokedRectangle(panelX, panelY, PANEL_W, panelBottom - panelY, 0xFF505060);
+            ctx.outline(panelX, panelY, PANEL_W, panelBottom - panelY, 0xFF505060);
             if (s == null) {
                 String msg = boxes.isEmpty()
                         ? "No textboxes yet. Press \"+ Add\" to create one."
                         : "Click a textbox to select it. Double-click to edit its text.";
                 int y = panelY + 8;
-                for (OrderedText line : textRenderer.wrapLines(Text.literal(msg), iw)) {
-                    ctx.drawText(textRenderer, line, px, y, 0xFFCCCCCC, false);
+                for (FormattedCharSequence line : font.split(Component.literal(msg), iw)) {
+                    ctx.text(font, line, px, y, 0xFFCCCCCC, false);
                     y += 10;
                 }
             }
         }
 
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
 
         if (panelVisible() && s != null) {
             for (Label l : labels) {
                 if (rowVisible(l.row())) {
-                    ctx.drawText(textRenderer, Text.literal(l.text()), l.x(), rowY(l.row()) + 4, l.color(), false);
+                    ctx.text(font, Component.literal(l.text()), l.x(), rowY(l.row()) + 4, l.color(), false);
                 }
             }
             if (tab == Tab.COLOR) renderColorExtras(ctx, s);
@@ -929,19 +926,19 @@ public class EditorScreen extends Screen {
         }
 
         String hint = "Drag: move | Corner: resize | Double-click: edit text | Arrows: nudge | Ctrl+Z: undo | Del: delete";
-        String shown = textRenderer.trimToWidth(hint, width - 8);
+        String shown = font.plainSubstrByWidth(hint, width - 8);
         // backing strip so the hint stays readable over the hotbar
-        ctx.fill(0, height - 14, textRenderer.getWidth(shown) + 8, height, 0xB0000000);
-        ctx.drawText(textRenderer, Text.literal(shown), 4, height - 11, 0xFFAAAAAA, true);
+        ctx.fill(0, height - 14, font.width(shown) + 8, height, 0xB0000000);
+        ctx.text(font, Component.literal(shown), 4, height - 11, 0xFFAAAAAA, true);
     }
 
-    private void renderColorExtras(DrawContext ctx, TextBox b) {
+    private void renderColorExtras(GuiGraphicsExtractor ctx, TextBox b) {
         int rgb = getRgb(b);
         if (rowVisible(5)) {
             int y = rowY(5);
             int x1 = px + 86, x2 = px + iw;
             ctx.fill(x1, y, x2, y + WH, 0xFF000000 | rgb);
-            ctx.drawStrokedRectangle(x1, y, x2 - x1, WH, 0xFFFFFFFF);
+            ctx.outline(x1, y, x2 - x1, WH, 0xFFFFFFFF);
         }
         int cw = swatchCell();
         for (int i = 0; i < SWATCHES.length; i++) {
@@ -951,7 +948,7 @@ public class EditorScreen extends Screen {
             int y = rowY(row) + 2;
             ctx.fill(x + 1, y, x + cw - 1, y + 12, 0xFF000000 | SWATCHES[i]);
             int outline = SWATCHES[i] == rgb ? 0xFFFFD700 : 0xFF303030;
-            ctx.drawStrokedRectangle(x + 1, y, cw - 2, 12, outline);
+            ctx.outline(x + 1, y, cw - 2, 12, outline);
         }
     }
 
@@ -964,7 +961,7 @@ public class EditorScreen extends Screen {
     }
 
     @Override
-    public boolean shouldPause() {
+    public boolean isPauseScreen() {
         return false;
     }
 }

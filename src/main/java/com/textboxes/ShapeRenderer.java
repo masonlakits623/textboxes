@@ -1,9 +1,9 @@
 package com.textboxes;
 
 import com.textboxes.TextBox.Shape;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gl.RenderPipelines;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import org.joml.Matrix3x2fStack;
 
 /**
@@ -166,11 +166,11 @@ public final class ShapeRenderer {
 
     /** Merges identical consecutive rows into one fill. */
     private static final class Rows {
-        private final DrawContext ctx;
+        private final GuiGraphicsExtractor ctx;
         private int x1, x2, color, yStart, yEnd;
         private boolean open;
 
-        Rows(DrawContext ctx) {
+        Rows(GuiGraphicsExtractor ctx) {
             this.ctx = ctx;
         }
 
@@ -201,9 +201,9 @@ public final class ShapeRenderer {
         right.add(y, Math.max(a0, b1), a1, color);
     }
 
-    public static void render(DrawContext ctx, TextBox b, int bw) {
-        int g = Math.max(1, MinecraftClient.getInstance().getWindow().getScaleFactor());
-        Matrix3x2fStack m = ctx.getMatrices();
+    public static void render(GuiGraphicsExtractor ctx, TextBox b, int bw) {
+        int g = Math.max(1, Minecraft.getInstance().getWindow().getGuiScale());
+        Matrix3x2fStack m = ctx.pose();
         m.pushMatrix();
         m.scale(1f / g, 1f / g);
         try {
@@ -213,7 +213,7 @@ public final class ShapeRenderer {
         }
     }
 
-    private static void draw(DrawContext ctx, TextBox b, int bw, int g) {
+    private static void draw(GuiGraphicsExtractor ctx, TextBox b, int bw, int g) {
         Shape sh = b.shape;
         int X = b.x * g, Y = b.y * g, W = b.width * g, H = b.height * g, D = bw * g;
         float S = b.shapeSize * g, tp = b.tailPos;
@@ -267,7 +267,7 @@ public final class ShapeRenderer {
         }
     }
 
-    private static void drawImage(DrawContext ctx, TextBox b, ImageManager.LoadedImage img,
+    private static void drawImage(GuiGraphicsExtractor ctx, TextBox b, ImageManager.LoadedImage img,
                                   int X, int Y, int W, int H, int D, float S, float tp) {
         int tw = img.width(), th = img.height();
         if (tw <= 0 || th <= 0) return;
@@ -304,7 +304,7 @@ public final class ShapeRenderer {
             float u0 = su + (l - dx) / dw * sw;
             float uw = (r - l) / dw * sw;
             float v0 = sv + (y - dy) / dh * shh;
-            ctx.drawTexture(RenderPipelines.GUI_TEXTURED, img.id(), l, y, u0 * UV, v0 * UV, r - l, 1,
+            ctx.blit(RenderPipelines.GUI_TEXTURED, img.id(), l, y, u0 * UV, v0 * UV, r - l, 1,
                     Math.max(1, Math.round(uw * UV)), Math.max(1, Math.round(vh * UV)), tw * UV, th * UV, color);
         }
     }

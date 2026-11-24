@@ -1,18 +1,18 @@
 package com.textboxes;
 
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gl.RenderPipelines;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.text.Style;
-import net.minecraft.text.StyleSpriteSource;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.FontDescription;
+import net.minecraft.network.chat.Style;
+import net.minecraft.resources.Identifier;
 import org.joml.Matrix3x2fStack;
 
 /** Draws a {@link TextBox}: background, image, border, then text. Shared by the HUD and the editor. */
 public final class TextBoxRenderer {
     private TextBoxRenderer() {}
 
-    public static void render(DrawContext ctx, TextRenderer tr, TextBox b) {
+    public static void render(GuiGraphicsExtractor ctx, Font tr, TextBox b) {
         int bw = Math.max(0, Math.min(b.borderWidth, Math.min(b.width, b.height) / 2));
         if (b.shape == null || b.shape == TextBox.Shape.RECTANGLE) {
             renderRect(ctx, b, bw);
@@ -25,7 +25,7 @@ public final class TextBoxRenderer {
         }
     }
 
-    private static void renderRect(DrawContext ctx, TextBox b, int bw) {
+    private static void renderRect(GuiGraphicsExtractor ctx, TextBox b, int bw) {
         int x1 = b.x, y1 = b.y, x2 = b.x + b.width, y2 = b.y + b.height;
 
         if (b.boxShadow && b.shadowOpacity > 0f && b.shadowOffset > 0) {
@@ -60,17 +60,17 @@ public final class TextBoxRenderer {
         }
     }
 
-    public static void drawImage(DrawContext ctx, ImageManager.LoadedImage img, int x, int y, int w, int h,
+    public static void drawImage(GuiGraphicsExtractor ctx, ImageManager.LoadedImage img, int x, int y, int w, int h,
                                  TextBox.ImageFit fit, int color) {
         int iw = img.width(), ih = img.height();
         if (iw <= 0 || ih <= 0) return;
         switch (fit) {
-            case STRETCH -> ctx.drawTexture(RenderPipelines.GUI_TEXTURED, img.id(), x, y, 0f, 0f, w, h, iw, ih, iw, ih, color);
+            case STRETCH -> ctx.blit(RenderPipelines.GUI_TEXTURED, img.id(), x, y, 0f, 0f, w, h, iw, ih, iw, ih, color);
             case FIT -> {
                 float s = Math.min(w / (float) iw, h / (float) ih);
                 int dw = Math.max(1, Math.round(iw * s));
                 int dh = Math.max(1, Math.round(ih * s));
-                ctx.drawTexture(RenderPipelines.GUI_TEXTURED, img.id(), x + (w - dw) / 2, y + (h - dh) / 2,
+                ctx.blit(RenderPipelines.GUI_TEXTURED, img.id(), x + (w - dw) / 2, y + (h - dh) / 2,
                         0f, 0f, dw, dh, iw, ih, iw, ih, color);
             }
             case FILL -> {
@@ -78,7 +78,7 @@ public final class TextBoxRenderer {
                 int rw = Math.max(1, Math.min(iw, Math.round(w / s)));
                 int rh = Math.max(1, Math.min(ih, Math.round(h / s)));
                 float u = (iw - rw) / 2f, v = (ih - rh) / 2f;
-                ctx.drawTexture(RenderPipelines.GUI_TEXTURED, img.id(), x, y, u, v, w, h, rw, rh, iw, ih, color);
+                ctx.blit(RenderPipelines.GUI_TEXTURED, img.id(), x, y, u, v, w, h, rw, rh, iw, ih, color);
             }
         }
     }
@@ -88,13 +88,13 @@ public final class TextBoxRenderer {
         Style style = Style.EMPTY
                 .withBold(b.bold)
                 .withItalic(b.italic)
-                .withUnderline(b.underline)
+                .withUnderlined(b.underline)
                 .withStrikethrough(b.strikethrough);
-        if (fontId != null) style = style.withFont(new StyleSpriteSource.Font(fontId));
+        if (fontId != null) style = style.withFont(new FontDescription.Resource(fontId));
         return style;
     }
 
-    private static void drawText(DrawContext ctx, TextRenderer tr, TextBox b, int ix1, int iy1, int ix2, int iy2) {
+    private static void drawText(GuiGraphicsExtractor ctx, Font tr, TextBox b, int ix1, int iy1, int ix2, int iy2) {
         float s = b.scale <= 0 ? 1f : b.scale;
         int pad = b.padding;
         float availWScaled = ix2 - ix1 - 2f * pad;
@@ -112,7 +112,7 @@ public final class TextBoxRenderer {
 
         int color = TextBox.argb(b.textColor, b.textOpacity);
         ctx.enableScissor(ix1, iy1, ix2, iy2);
-        Matrix3x2fStack m = ctx.getMatrices();
+        Matrix3x2fStack m = ctx.pose();
         m.pushMatrix();
         m.translate(ix1 + pad, top);
         m.scale(s, s);

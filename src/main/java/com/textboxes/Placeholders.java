@@ -1,18 +1,17 @@
 package com.textboxes;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.client.network.ServerInfo;
-import net.minecraft.client.world.ClientWorld;
-
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.client.player.LocalPlayer;
 
 /** Live values like {fps} or {coords}, filled in every frame before the text is laid out. */
 public final class Placeholders {
@@ -59,7 +58,7 @@ public final class Placeholders {
         if (text.indexOf('{') < 0) return text;
         Matcher m = PATTERN.matcher(text);
         if (!m.find()) return text;
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         StringBuilder sb = new StringBuilder();
         do {
             m.appendReplacement(sb, Matcher.quoteReplacement(value(m.group(1), mc)));
@@ -68,44 +67,44 @@ public final class Placeholders {
         return sb.toString();
     }
 
-    private static String value(String key, MinecraftClient mc) {
+    private static String value(String key, Minecraft mc) {
         switch (key) {
-            case "fps": return Integer.toString(mc.getCurrentFps());
+            case "fps": return Integer.toString(mc.getFps());
             case "clock": return LocalTime.now().format(CLOCK);
             case "date": return LocalDate.now().toString();
             case "server": {
-                ServerInfo si = mc.getCurrentServerEntry();
-                if (si != null) return si.address;
-                return mc.isInSingleplayer() ? "Singleplayer" : "-";
+                ServerData si = mc.getCurrentServer();
+                if (si != null) return si.ip;
+                return mc.isLocalServer() ? "Singleplayer" : "-";
             }
             default: break;
         }
-        ClientPlayerEntity p = mc.player;
-        ClientWorld w = mc.world;
+        LocalPlayer p = mc.player;
+        ClientLevel w = mc.level;
         if (p == null || w == null) return "-";
         return switch (key) {
             case "x" -> Integer.toString(p.getBlockX());
             case "y" -> Integer.toString(p.getBlockY());
             case "z" -> Integer.toString(p.getBlockZ());
             case "coords" -> p.getBlockX() + " " + p.getBlockY() + " " + p.getBlockZ();
-            case "facing" -> pretty(p.getHorizontalFacing().asString());
-            case "biome" -> w.getBiome(p.getBlockPos()).getKey()
-                    .map(k -> pretty(k.getValue().getPath())).orElse("?");
-            case "dimension" -> pretty(w.getRegistryKey().getValue().getPath());
-            case "light" -> Integer.toString(w.getLightLevel(p.getBlockPos()));
+            case "facing" -> pretty(p.getDirection().getSerializedName());
+            case "biome" -> w.getBiome(p.blockPosition()).unwrapKey()
+                    .map(k -> pretty(k.identifier().getPath())).orElse("?");
+            case "dimension" -> pretty(w.dimension().identifier().getPath());
+            case "light" -> Integer.toString(w.getMaxLocalRawBrightness(p.blockPosition()));
             case "time" -> {
-                long t = Math.floorMod(w.getTimeOfDay() + 6000L, 24000L);
+                long t = Math.floorMod(w.getOverworldClockTime() + 6000L, 24000L);
                 yield String.format(Locale.ROOT, "%02d:%02d", t / 1000, (t % 1000) * 60 / 1000);
             }
-            case "day" -> Long.toString(w.getTimeOfDay() / 24000L + 1);
+            case "day" -> Long.toString(w.getOverworldClockTime() / 24000L + 1);
             case "player" -> p.getName().getString();
             case "health" -> Integer.toString((int) Math.ceil(p.getHealth()));
-            case "food" -> Integer.toString(p.getHungerManager().getFoodLevel());
-            case "armor" -> Integer.toString(p.getArmor());
+            case "food" -> Integer.toString(p.getFoodData().getFoodLevel());
+            case "armor" -> Integer.toString(p.getArmorValue());
             case "level" -> Integer.toString(p.experienceLevel);
             case "ping" -> {
-                ClientPlayNetworkHandler nh = mc.getNetworkHandler();
-                PlayerListEntry e = nh == null ? null : nh.getPlayerListEntry(p.getUuid());
+                ClientPacketListener nh = mc.getConnection();
+                PlayerInfo e = nh == null ? null : nh.getPlayerInfo(p.getUUID());
                 yield e == null ? "0" : Integer.toString(e.getLatency());
             }
             default -> "?";

@@ -148,7 +148,7 @@ Textboxes is client-side only, so it works on any server and the server doesn't 
 
 ## 🛠️ Building from source
 
-This branch builds the Minecraft 1.21.11 version and needs Java 21. The Minecraft 26.3 version is on the `mc/26.3` branch and needs Java 25. Then run:
+This branch builds the Minecraft 26.3 version and needs Java 25. The Minecraft 1.21.11 version is on the `main` branch and needs Java 21. Then run:
 
 ```bash
 ./gradlew build

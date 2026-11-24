@@ -3,14 +3,13 @@ package com.textboxes.gui;
 import com.textboxes.ImageManager;
 import com.textboxes.TextBox;
 import com.textboxes.TextBoxRenderer;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.text.Text;
-
 import java.util.List;
 import java.util.function.Consumer;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.network.chat.Component;
 
 /** Lists images in config/textboxes/images/ with thumbnails. */
 public class ImagePickerScreen extends Screen {
@@ -29,7 +28,7 @@ public class ImagePickerScreen extends Screen {
      * @param onPick    receives the chosen relative image path
      */
     public ImagePickerScreen(Screen parent, String current, boolean allowNone, Consumer<String> onPick) {
-        super(Text.literal("Choose Image"));
+        super(Component.literal("Choose Image"));
         this.parent = parent;
         this.current = ImageManager.normalizeName(current);
         this.allowNone = allowNone;
@@ -47,19 +46,19 @@ public class ImagePickerScreen extends Screen {
 
         int bw = (listW - 6) / 4;
         int by = height - 24;
-        addDrawableChild(ButtonWidget.builder(Text.literal("Open folder"), b -> ImageManager.openFolder())
-                .dimensions(listX, by, bw, 18).build());
-        addDrawableChild(ButtonWidget.builder(Text.literal("Reload"), b -> {
+        addRenderableWidget(Button.builder(Component.literal("Open folder"), b -> ImageManager.openFolder())
+                .bounds(listX, by, bw, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Reload"), b -> {
             ImageManager.reload();
-            clearAndInit();
-        }).dimensions(listX + (bw + 2), by, bw, 18).build());
-        ButtonWidget none = addDrawableChild(ButtonWidget.builder(Text.literal("No image"), b -> {
+            rebuildWidgets();
+        }).bounds(listX + (bw + 2), by, bw, 18).build());
+        Button none = addRenderableWidget(Button.builder(Component.literal("No image"), b -> {
             onPick.accept("");
-            close();
-        }).dimensions(listX + 2 * (bw + 2), by, bw, 18).build());
+            onClose();
+        }).bounds(listX + 2 * (bw + 2), by, bw, 18).build());
         none.active = allowNone;
-        addDrawableChild(ButtonWidget.builder(Text.literal("Cancel"), b -> close())
-                .dimensions(listX + 3 * (bw + 2), by, bw, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> onClose())
+                .bounds(listX + 3 * (bw + 2), by, bw, 18).build());
     }
 
     private int maxScroll() {
@@ -67,21 +66,21 @@ public class ImagePickerScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(DrawContext ctx, int mouseX, int mouseY, float deltaTicks) {
+    public void extractBackground(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float deltaTicks) {
         ctx.fill(0, 0, width, height, 0x90000000);
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        ctx.drawCenteredTextWithShadow(textRenderer, title, width / 2, 9, 0xFFFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
+        ctx.centeredText(font, title, width / 2, 9, 0xFFFFFFFF);
         ctx.fill(listX, listY, listX + listW, listBottom, 0xC0000000);
-        ctx.drawStrokedRectangle(listX - 1, listY - 1, listW + 2, listBottom - listY + 2, 0xFF505060);
+        ctx.outline(listX - 1, listY - 1, listW + 2, listBottom - listY + 2, 0xFF505060);
 
         if (files.isEmpty()) {
-            ctx.drawCenteredTextWithShadow(textRenderer, Text.literal("No images found."), width / 2, listY + 12, 0xFFFFFFFF);
-            ctx.drawCenteredTextWithShadow(textRenderer, Text.literal("Put PNG, JPG, GIF or BMP files in"),
+            ctx.centeredText(font, Component.literal("No images found."), width / 2, listY + 12, 0xFFFFFFFF);
+            ctx.centeredText(font, Component.literal("Put PNG, JPG, GIF or BMP files in"),
                     width / 2, listY + 28, 0xFFAAAAAA);
-            ctx.drawCenteredTextWithShadow(textRenderer, Text.literal("config/textboxes/images/ then press Reload."),
+            ctx.centeredText(font, Component.literal("config/textboxes/images/ then press Reload."),
                     width / 2, listY + 40, 0xFFAAAAAA);
         } else {
             ctx.enableScissor(listX, listY, listX + listW, listBottom);
@@ -100,28 +99,28 @@ public class ImagePickerScreen extends Screen {
                 if (img != null) {
                     TextBoxRenderer.drawImage(ctx, img, listX + 2, y + 2, 20, 20, TextBox.ImageFit.FIT, 0xFFFFFFFF);
                     String dims = img.width() + "x" + img.height();
-                    ctx.drawText(textRenderer, Text.literal(dims), listX + listW - 4 - textRenderer.getWidth(dims),
+                    ctx.text(font, Component.literal(dims), listX + listW - 4 - font.width(dims),
                             y + 8, 0xFF888888, false);
                 } else {
-                    ctx.drawText(textRenderer, Text.literal("?"), listX + 9, y + 8, 0xFFFF5555, false);
+                    ctx.text(font, Component.literal("?"), listX + 9, y + 8, 0xFFFF5555, false);
                 }
-                String shown = textRenderer.trimToWidth(name, listW - 90);
-                ctx.drawText(textRenderer, Text.literal(shown), listX + 28, y + 8, img != null ? 0xFFFFFFFF : 0xFFFF5555, true);
+                String shown = font.plainSubstrByWidth(name, listW - 90);
+                ctx.text(font, Component.literal(shown), listX + 28, y + 8, img != null ? 0xFFFFFFFF : 0xFFFF5555, true);
             }
             ctx.disableScissor();
         }
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
     }
 
     @Override
-    public boolean mouseClicked(Click click, boolean doubled) {
+    public boolean mouseClicked(MouseButtonEvent click, boolean doubled) {
         if (super.mouseClicked(click, doubled)) return true;
         double mx = click.x(), my = click.y();
         if (mx >= listX && mx < listX + listW && my >= listY && my < listBottom) {
             int idx = (int) ((my - listY + scroll) / ENTRY_H);
             if (idx >= 0 && idx < files.size()) {
                 onPick.accept(files.get(idx));
-                close();
+                onClose();
                 return true;
             }
         }
@@ -135,8 +134,8 @@ public class ImagePickerScreen extends Screen {
     }
 
     @Override
-    public void close() {
+    public void onClose() {
         if (parent instanceof EditorScreen editor) editor.markDirty();
-        if (client != null) client.setScreen(parent);
+        if (minecraft != null) minecraft.gui.setScreen(parent);
     }
 }

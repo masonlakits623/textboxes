@@ -1,13 +1,12 @@
 package com.textboxes.gui;
 
-import net.minecraft.client.gui.widget.SliderWidget;
-import net.minecraft.text.Text;
-
 import java.util.function.DoubleConsumer;
 import java.util.function.DoubleFunction;
+import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.network.chat.Component;
 
 /** Slider over a real range [min, max] with optional step snapping. */
-public class ValueSlider extends SliderWidget {
+public class ValueSlider extends AbstractSliderButton {
     private final String label;
     private final double min, max, step;
     private final DoubleFunction<String> format;
@@ -15,7 +14,7 @@ public class ValueSlider extends SliderWidget {
 
     public ValueSlider(int x, int y, int width, int height, String label, double min, double max, double step,
                        double current, DoubleFunction<String> format, DoubleConsumer setter) {
-        super(x, y, width, height, Text.empty(), 0.0);
+        super(x, y, width, height, Component.empty(), 0.0);
         this.label = label;
         this.min = min;
         this.max = max;
@@ -39,7 +38,7 @@ public class ValueSlider extends SliderWidget {
 
     @Override
     protected void updateMessage() {
-        setMessage(Text.literal(label + ": " + format.apply(getReal())));
+        setMessage(Component.literal(label + ": " + format.apply(getReal())));
     }
 
     @Override

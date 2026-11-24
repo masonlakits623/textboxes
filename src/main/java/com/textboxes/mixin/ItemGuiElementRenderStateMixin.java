@@ -1,7 +1,7 @@
 package com.textboxes.mixin;
 
 import com.textboxes.ItemAlpha;
-import net.minecraft.client.gui.render.state.ItemGuiElementRenderState;
+import net.minecraft.client.renderer.state.gui.GuiItemRenderState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Remembers the opacity that was active when this item was queued for drawing. */
-@Mixin(ItemGuiElementRenderState.class)
+@Mixin(GuiItemRenderState.class)
 public abstract class ItemGuiElementRenderStateMixin implements ItemAlpha.Holder {
     // Stored as "fade" so the untouched default (0) means fully opaque.
     @Unique

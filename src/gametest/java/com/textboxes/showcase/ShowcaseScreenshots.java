@@ -13,16 +13,15 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
-import net.minecraft.client.gui.screen.world.WorldCreator;
-import net.minecraft.client.option.GraphicsMode;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.world.biome.BiomeKeys;
-
+import net.minecraft.client.GraphicsPreset;
+import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.levelgen.Heightmap;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -55,36 +54,36 @@ public class ShowcaseScreenshots implements FabricClientGameTest {
 
         ctx.getInput().resizeWindow(W, H);
         ctx.runOnClient(c -> {
-            c.options.getGuiScale().setValue(GUI_SCALE);
-            c.options.getViewDistance().setValue(12);
-            c.options.applyGraphicsMode(GraphicsMode.FANCY);
-            c.onResolutionChanged();
+            c.options.guiScale().set(GUI_SCALE);
+            c.options.renderDistance().set(12);
+            c.options.applyGraphicsPreset(GraphicsPreset.FANCY);
+            c.resizeGui();
         });
 
         try (TestSingleplayerContext sp = ctx.worldBuilder()
                 .setUseConsistentSettings(false)
                 .adjustSettings(cr -> {
                     cr.setSeed(SEED);
-                    cr.setGameMode(WorldCreator.Mode.CREATIVE);
-                    cr.setCheatsEnabled(true);
+                    cr.setGameMode(WorldCreationUiState.SelectedGameMode.CREATIVE);
+                    cr.setAllowCommands(true);
                 })
                 .create()) {
 
             BlockPos spot = sp.getServer().computeOnServer(server -> {
-                ServerWorld world = server.getOverworld();
-                BlockPos origin = world.getSpawnPoint().getPos();
-                Pair<BlockPos, RegistryEntry<Biome>> found = world.locateBiome(
-                        b -> b.matchesKey(BiomeKeys.CHERRY_GROVE), origin, 4000, 32, 64);
+                ServerLevel world = server.overworld();
+                BlockPos origin = world.getRespawnData().pos();
+                Pair<BlockPos, Holder<Biome>> found = world.findClosestBiome3d(
+                        b -> b.is(Biomes.CHERRY_GROVE), origin, 4000, 32, 64);
                 BlockPos p = found != null ? found.getFirst() : origin;
                 world.getChunk(p.getX() >> 4, p.getZ() >> 4);
-                int top = world.getTopY(Heightmap.Type.MOTION_BLOCKING, p.getX(), p.getZ());
+                int top = world.getHeight(Heightmap.Types.MOTION_BLOCKING, p.getX(), p.getZ());
                 return new BlockPos(p.getX(), top + 16, p.getZ());
             });
             sp.getServer().runCommand("tp @a " + spot.getX() + " " + spot.getY() + " " + spot.getZ() + " " + YAW + " 20");
             sp.getServer().runOnServer(server -> {
-                for (ServerPlayerEntity pl : server.getPlayerManager().getPlayerList()) {
+                for (ServerPlayer pl : server.getPlayerList().getPlayers()) {
                     pl.getAbilities().flying = true;
-                    pl.sendAbilitiesUpdate();
+                    pl.onUpdateAbilities();
                 }
             });
             sp.getServer().runCommand("time set 6000");
@@ -93,11 +92,11 @@ public class ShowcaseScreenshots implements FabricClientGameTest {
             for (int i = 0; i < hotbar.length; i++) {
                 sp.getServer().runCommand("item replace entity @a hotbar." + i + " with minecraft:" + hotbar[i]);
             }
-            ctx.getInput().pressKey(o -> o.hotbarKeys[0]);
+            ctx.getInput().pressKey(o -> o.keyHotbarSlots[0]);
 
             ctx.waitTicks(40);
             try {
-                sp.getClientWorld().waitForChunksRender(false, 1200);
+                sp.getConnection().waitForChunksRender(false, 1200);
             } catch (AssertionError e) {
                 // far chunks still meshing is fine for a screenshot
             }
@@ -105,9 +104,9 @@ public class ShowcaseScreenshots implements FabricClientGameTest {
             clean(ctx);
 
             // 1. A clean photo of the world, used as an image inside a textbox.
-            ctx.runOnClient(c -> c.options.hudHidden = true);
+            ctx.runOnClient(c -> { if (!c.gui.hud.isHidden()) c.gui.hud.toggle(); });
             Path photo = ctx.takeScreenshot(TestScreenshotOptions.of("photo").disableCounterPrefix());
-            ctx.runOnClient(c -> c.options.hudHidden = false);
+            ctx.runOnClient(c -> { if (c.gui.hud.isHidden()) c.gui.hud.toggle(); });
             try {
                 BufferedImage full = ImageIO.read(photo.toFile());
                 BufferedImage small = new BufferedImage(480, 270, BufferedImage.TYPE_INT_RGB);
@@ -130,23 +129,23 @@ public class ShowcaseScreenshots implements FabricClientGameTest {
             // 2. Editor, TEXT tab on the to-do box.
             ctx.setScreen(EditorScreen::new);
             ctx.waitTicks(3);
-            ctx.runOnClient(c -> ((EditorScreen) c.currentScreen).select(1, 1));
+            ctx.runOnClient(c -> ((EditorScreen) c.gui.screen()).select(1, 1));
             ctx.getInput().setCursorPos(-10, -10);
             ctx.waitTicks(3);
             shot(ctx, out, "02-editor-text");
 
             // 3. Editor, COLOR tab on the PvP box.
-            ctx.runOnClient(c -> ((EditorScreen) c.currentScreen).select(4, 2));
+            ctx.runOnClient(c -> ((EditorScreen) c.gui.screen()).select(4, 2));
             ctx.waitTicks(3);
             shot(ctx, out, "03-editor-colors");
 
             // 4. Editor, IMAGE tab on the photo box.
-            ctx.runOnClient(c -> ((EditorScreen) c.currentScreen).select(5, 3));
+            ctx.runOnClient(c -> ((EditorScreen) c.gui.screen()).select(5, 3));
             ctx.waitTicks(3);
             shot(ctx, out, "04-editor-image");
 
             // 5. Multi-line text editor with item / image tokens.
-            EditorScreen editor = ctx.computeOnClient(c -> (EditorScreen) c.currentScreen);
+            EditorScreen editor = ctx.computeOnClient(c -> (EditorScreen) c.gui.screen());
             ctx.setScreen(() -> new TextEditScreen(editor, TextboxesClient.CONFIG.boxes.get(1)));
             ctx.waitTicks(3);
             shot(ctx, out, "05-text-editor");
@@ -192,13 +191,13 @@ public class ShowcaseScreenshots implements FabricClientGameTest {
             // 11. Editor, BOX tab with the shape controls.
             ctx.setScreen(EditorScreen::new);
             ctx.waitTicks(3);
-            ctx.runOnClient(c -> ((EditorScreen) c.currentScreen).select(8, 0));
+            ctx.runOnClient(c -> ((EditorScreen) c.gui.screen()).select(8, 0));
             ctx.getInput().setCursorPos(-10, -10);
             ctx.waitTicks(3);
             shot(ctx, out, "11-editor-shapes");
 
             // 12. Text editor with font / color / live-info tokens.
-            EditorScreen editor2 = ctx.computeOnClient(c -> (EditorScreen) c.currentScreen);
+            EditorScreen editor2 = ctx.computeOnClient(c -> (EditorScreen) c.gui.screen());
             ctx.setScreen(() -> new TextEditScreen(editor2, TextboxesClient.CONFIG.boxes.get(1)));
             ctx.waitTicks(3);
             shot(ctx, out, "12-text-editor-fonts");
@@ -221,8 +220,8 @@ public class ShowcaseScreenshots implements FabricClientGameTest {
     /** Clears chat lines and toasts so they don't clutter the shots. */
     private static void clean(ClientGameTestContext ctx) {
         ctx.runOnClient(c -> {
-            c.inGameHud.getChatHud().clear(false);
-            c.getToastManager().clear();
+            c.gui.hud.getChat().clearMessages(false);
+            c.gui.toastManager().clear();
         });
         ctx.waitTicks(2);
     }

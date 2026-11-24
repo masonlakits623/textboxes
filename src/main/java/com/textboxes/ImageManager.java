@@ -1,13 +1,13 @@
 package com.textboxes;
 
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Util;
 
 import javax.imageio.ImageIO;
+import com.mojang.blaze3d.platform.NativeImage;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -99,10 +99,10 @@ public final class ImageManager {
         NativeImage image = NativeImage.read(bytes);
         int w = image.getWidth();
         int h = image.getHeight();
-        Identifier id = Identifier.of(TextboxesClient.MOD_ID, "dynamic/image_" + (counter++));
+        Identifier id = Identifier.fromNamespaceAndPath(TextboxesClient.MOD_ID, "dynamic/image_" + (counter++));
         final String label = "textboxes image " + name;
-        NativeImageBackedTexture texture = new NativeImageBackedTexture(() -> label, image);
-        MinecraftClient.getInstance().getTextureManager().registerTexture(id, texture);
+        DynamicTexture texture = new DynamicTexture(() -> label, image);
+        Minecraft.getInstance().getTextureManager().register(id, texture);
         return new LoadedImage(id, w, h);
     }
 
@@ -128,9 +128,9 @@ public final class ImageManager {
 
     /** Frees all textures so files are re-read on next use. */
     public static void reload() {
-        MinecraftClient client = MinecraftClient.getInstance();
+        Minecraft client = Minecraft.getInstance();
         for (LoadedImage img : CACHE.values()) {
-            client.getTextureManager().destroyTexture(img.id());
+            client.getTextureManager().release(img.id());
         }
         CACHE.clear();
         FAILED.clear();
@@ -159,6 +159,6 @@ public final class ImageManager {
 
     public static void openFolder() {
         ensureDir();
-        Util.getOperatingSystem().open(dir());
+        com.mojang.blaze3d.Blaze3D.openPath(dir());
     }
 }

@@ -1,24 +1,24 @@
 package com.textboxes;
 
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gl.RenderPipelines;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Style;
-import net.minecraft.text.StyleSpriteSource;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextColor;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
 import org.joml.Matrix3x2fStack;
 
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FontDescription;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextColor;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 /**
  * Text with inline icons. Tokens inside box text:
@@ -96,15 +96,15 @@ public final class InlineText {
     /** Makes the stack an item token refers to, or null if the item id is unknown. */
     public static ItemStack makeStack(String idStr, String name) {
         Identifier id = Identifier.tryParse(idStr.trim().toLowerCase(Locale.ROOT));
-        if (id == null || !Registries.ITEM.containsId(id)) return null;
-        Item item = Registries.ITEM.get(id);
+        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return null;
+        Item item = BuiltInRegistries.ITEM.getValue(id);
         if (item == Items.AIR) return null;
         ItemStack stack = new ItemStack(item);
-        if (name != null && !name.isEmpty()) stack.set(DataComponentTypes.CUSTOM_NAME, Text.literal(name));
+        if (name != null && !name.isEmpty()) stack.set(DataComponents.CUSTOM_NAME, Component.literal(name));
         return stack;
     }
 
-    public static Layout layout(TextBox b, TextRenderer tr, Style base, int availW) {
+    public static Layout layout(TextBox b, Font tr, Style base, int availW) {
         String text = Placeholders.apply(b.text);
         String key = text + '\u0000' + b.resolvedFont() + b.bold + b.italic + b.underline + b.strikethrough
                 + '|' + availW + '|' + b.iconSize + '|' + b.lineSpacing + '|' + ImageManager.generation;
@@ -115,11 +115,11 @@ public final class InlineText {
         return l;
     }
 
-    private static Layout build(TextBox b, String text, TextRenderer tr, Style base, int availW) {
+    private static Layout build(TextBox b, String text, Font tr, Style base, int availW) {
         List<Line> out = new ArrayList<>();
         for (String raw : text.split("\n", -1)) {
             List<Atom> atoms = parseLine(raw, tr, base, b.iconSize);
-            wrap(atoms, availW, tr.fontHeight, out);
+            wrap(atoms, availW, tr.lineHeight, out);
         }
         int total = 0;
         for (Line l : out) total += l.height;
@@ -127,7 +127,7 @@ public final class InlineText {
         return new Layout(out, total);
     }
 
-    private static List<Atom> parseLine(String raw, TextRenderer tr, Style base, int iconSize) {
+    private static List<Atom> parseLine(String raw, Font tr, Style base, int iconSize) {
         // Swap tokens for placeholder code points so one formatted-text pass keeps color codes continuous.
         // Each marker is an Atom (icon), a StyleOp, or a String (a broken token, shown in red).
         List<Object> marks = new ArrayList<>();
@@ -152,8 +152,8 @@ public final class InlineText {
             int cp = s.codePointAt(i);
             if (cp == '§') {
                 if (i + 1 >= s.length()) break;
-                Formatting f = Formatting.byCode(s.charAt(i + 1));
-                if (f != null) style = f == Formatting.RESET ? base : style.withExclusiveFormatting(f);
+                ChatFormatting f = ChatFormatting.getByCode(s.charAt(i + 1));
+                if (f != null) style = f == ChatFormatting.RESET ? base : style.applyLegacyFormat(f);
                 i += 2;
                 continue;
             }
@@ -166,7 +166,7 @@ public final class InlineText {
                 } else if (mark instanceof StyleOp op) {
                     style = op.apply(style, base);
                 } else {
-                    Style err = style.withColor(Formatting.RED);
+                    Style err = style.withColor(ChatFormatting.RED);
                     ((String) mark).codePoints().forEach(c -> atoms.add(glyph(tr, c, err)));
                 }
             } else {
@@ -183,7 +183,7 @@ public final class InlineText {
             if (name == null || name.isBlank()) return (StyleOp) (cur, base) -> cur.withFont(base.getFont());
             Identifier id = fontId(name);
             if (id == null) return null;
-            StyleSpriteSource.Font font = new StyleSpriteSource.Font(id);
+            FontDescription.Resource font = new FontDescription.Resource(id);
             return (StyleOp) (cur, base) -> cur.withFont(font);
         }
         if (m.group(5) != null) {
@@ -193,9 +193,9 @@ public final class InlineText {
         return (StyleOp) (cur, base) -> cur.withColor(base.getColor());
     }
 
-    private static Glyph glyph(TextRenderer tr, int cp, Style style) {
+    private static Glyph glyph(Font tr, int cp, Style style) {
         String s = Character.toString(cp);
-        return new Glyph(s, style, tr.getWidth(Text.literal(s).setStyle(style)), cp == ' ');
+        return new Glyph(s, style, tr.width(Component.literal(s).setStyle(style)), cp == ' ');
     }
 
     private static Atom makeIcon(String kind, String body, int size) {
@@ -267,7 +267,7 @@ public final class InlineText {
     }
 
     /** Draws a laid-out text block in the current (already translated/scaled) matrix space. */
-    public static void draw(DrawContext ctx, TextRenderer tr, Layout layout, TextBox.Align align, float availW,
+    public static void draw(GuiGraphicsExtractor ctx, Font tr, Layout layout, TextBox.Align align, float availW,
                             int color, boolean shadow, int lineSpacing) {
         int y = 0;
         for (Line line : layout.lines()) {
@@ -276,7 +276,7 @@ public final class InlineText {
                 case CENTER -> Math.round((availW - line.width) / 2f);
                 case RIGHT -> Math.round(availW - line.width);
             };
-            int textY = y + (line.height - tr.fontHeight + 1) / 2;
+            int textY = y + (line.height - tr.lineHeight + 1) / 2;
             List<Placed> items = line.items;
             int k = 0;
             while (k < items.size()) {
@@ -290,25 +290,25 @@ public final class InlineText {
                         run.append(g2.s());
                         k++;
                     }
-                    ctx.drawText(tr, Text.literal(run.toString()).setStyle(g.style()), lx + startX, textY, color, shadow);
+                    ctx.text(tr, Component.literal(run.toString()).setStyle(g.style()), lx + startX, textY, color, shadow);
                 } else {
                     Icon icon = (Icon) p.atom();
                     int iy = y + (line.height - icon.height()) / 2;
                     if (icon.stack() != null) {
-                        Matrix3x2fStack m = ctx.getMatrices();
+                        Matrix3x2fStack m = ctx.pose();
                         m.pushMatrix();
                         m.translate(lx + p.x(), iy);
                         m.scale(icon.width() / 16f, icon.height() / 16f);
                         ItemAlpha.current = ((color >>> 24) & 0xFF) / 255f;
                         try {
-                            ctx.drawItem(icon.stack(), 0, 0);
+                            ctx.item(icon.stack(), 0, 0);
                         } finally {
                             ItemAlpha.current = 1f;
                         }
                         m.popMatrix();
                     } else if (icon.image() != null) {
                         ImageManager.LoadedImage img = icon.image();
-                        ctx.drawTexture(RenderPipelines.GUI_TEXTURED, img.id(), lx + p.x(), iy, 0f, 0f,
+                        ctx.blit(RenderPipelines.GUI_TEXTURED, img.id(), lx + p.x(), iy, 0f, 0f,
                                 icon.width(), icon.height(), img.width(), img.height(), img.width(), img.height(),
                                 (color & 0xFF000000) | 0xFFFFFF);
                     }
